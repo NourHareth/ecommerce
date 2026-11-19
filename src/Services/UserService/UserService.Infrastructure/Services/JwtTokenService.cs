@@ -85,13 +85,8 @@ public class JwtTokenService : ITokenService
     public async Task<Guid?> ValidateAndRevokeRefreshTokenAsync(string refreshToken, CancellationToken ct = default)
     {
         var hash = TokenHasher.HashToken(refreshToken);
-        var rt = await _refreshTokenRepository.GetByTokenHashAsync(hash, ct);
-        if (rt == null) return null;
-        var userId = rt.UserId;
-        await _refreshTokenRepository.RevokeAsync(rt, ct);
-        return userId;
+        return await _refreshTokenRepository.ConsumeAsync(hash, ct);
     }
-
     public async Task RevokeRefreshTokenAsync(string refreshToken, CancellationToken ct = default)
     {
         var hash = TokenHasher.HashToken(refreshToken);

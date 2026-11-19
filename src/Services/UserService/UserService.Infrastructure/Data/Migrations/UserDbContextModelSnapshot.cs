@@ -380,7 +380,8 @@ namespace AmCart.UserService.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TokenHash");
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
 
                     b.HasIndex("UserId", "ExpiresAt");
 

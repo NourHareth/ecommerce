@@ -20,7 +20,7 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
         builder.Property(e => e.RevokedAt).HasColumnName("revoked_at");
         builder.Property(e => e.CreatedAt).HasColumnName("created_at");
 
-        builder.HasIndex(e => e.TokenHash);
+        builder.HasIndex(e => e.TokenHash).IsUnique();
         builder.HasIndex(e => new { e.UserId, e.ExpiresAt });
     }
 }
