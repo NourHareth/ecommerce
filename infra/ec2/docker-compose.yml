@@ -28,6 +28,18 @@ services:
     image: ${USER_SERVICE_IMAGE:?USER_SERVICE_IMAGE is required}
     container_name: amcart-user-service
     restart: unless-stopped
+
+    # Container hardening
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,uid=1654,gid=1654
+    mem_limit: 512m
+    cpus: 1.0
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
     depends_on:
       postgres:
         condition: service_healthy
