@@ -52,3 +52,5 @@ coverage/
 .DS_Store
 Thumbs.db
 Desktop.ini
+# Self-signed TLS certificates and private keys (never commit)
+infra/ec2/certs/
