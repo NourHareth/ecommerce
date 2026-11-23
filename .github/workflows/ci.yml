@@ -75,7 +75,31 @@ jobs:
           context: src
           file: src/Services/ProductService/Dockerfile
           push: false
+          load: true
           tags: product-service:ci
+
+      - name: Verify ProductService runtime hardening
+        run: |
+          docker run --rm \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,uid=1654,gid=1654 \
+            --memory=512m \
+            --cpus=1.0 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --entrypoint sh product-service:ci -c '
+              test "$(id -u)" -ne 0 &&
+              grep -Eq "^CapEff:[[:space:]]+0+$" /proc/self/status &&
+              grep -Eq "^NoNewPrivs:[[:space:]]+1$" /proc/self/status &&
+              touch /tmp/test-write &&
+              rm /tmp/test-write &&
+              if touch /app/test-write 2>/dev/null; then
+                echo APP_WRITABLE_UNEXPECTED
+                exit 1
+              else
+                echo PRODUCT_SERVICE_HARDENING_OK
+              fi
+            '
 
       - name: Build UI image
         uses: docker/build-push-action@v6
