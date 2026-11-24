@@ -54,3 +54,6 @@ Thumbs.db
 Desktop.ini
 # Self-signed TLS certificates and private keys (never commit)
 infra/ec2/certs/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
