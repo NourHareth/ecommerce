@@ -1,0 +1,29 @@
+# 2026-11-24T23:06:10+00:00 · branch fix/k8s-dns-probes @ 4128b43 · images 25837cfe829b
+# Environment: VM minikube profile amcart (Kubernetes v1.37, Calico, Kyverno v1.20)
+# Command: deploy/scripts/verify-hardening.sh
+
+== A. Admission control ==================================================
+  PASS  root + privileged pod (blocked by Pod Security Admission) was rejected
+        violates PodSecurity "restricted:latest": privileged (container "c" must not set securityContext.privileged=true), allowPrivilegeEscalation != false (container "c" must set securityContext.allowPrivilegeEscalation=false), unrestricted capabilities (container "c" must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "c" must set securityContext.runAsNonRoot=true), runAsUser=0 (container "c" must not set runAsUser=0), seccompProfile (pod or container "c" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")
+  PASS  PSA-compliant pod with :latest image, writable root FS, no limits (blocked by Kyverno) was rejected
+        R4 read-only root filesystem: set securityContext.
+  PASS  non-hardened Deployment (Kyverno autogen rule) was rejected
+        R1 non-root: set securityContext.
+  PASS  hardened pod admitted (positive control)
+
+== B. Network segmentation ===============================================
+  PASS  all deployments Available
+  PASS  ui-676dbd5bf-wbpxb -> user-service.amcart-services.svc.cluster.local:8080 allowed (needed)
+  PASS  ui-676dbd5bf-wbpxb -> product-service.amcart-services.svc.cluster.local:8080 allowed (needed)
+  PASS  ui-676dbd5bf-wbpxb -> postgres.amcart-databases.svc.cluster.local:5432 blocked
+  PASS  ui-676dbd5bf-wbpxb -> 1.1.1.1:443 blocked
+  PASS  postgres-65b9b6fd58-vxlkj -> product-service.amcart-services.svc.cluster.local:8080 blocked
+  PASS  postgres-65b9b6fd58-vxlkj -> 1.1.1.1:443 blocked
+
+== C. Application still reachable after segmentation =====================
+  PASS  GET / (SPA) = 200
+  PASS  GET /api/v1/products = 200 (ui -> product-service -> postgres)
+  PASS  GET /health = 200 (ui -> user-service -> postgres)
+
+Result: 14 passed, 0 failed
+exit=0
