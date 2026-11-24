@@ -39,11 +39,13 @@ public class OrderRepository : IOrderRepository
 
     public async Task<Order?> GetByIdForUserAsync(Guid orderId, Guid userId, CancellationToken ct = default)
     {
+        // Object-level authorization in the query itself (F2): an order that belongs to someone
+        // else is indistinguishable from one that does not exist (the API answers 404).
         return await _db.Orders
             .AsNoTracking()
             .Include(o => o.Items)
             .ThenInclude(i => i.Product)
             .ThenInclude(p => p!.Images)
-            .FirstOrDefaultAsync(o => o.Id == orderId, ct);
+            .FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == userId, ct);
     }
 }
