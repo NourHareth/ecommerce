@@ -1,0 +1,102 @@
+# UserService: authentication, JWT issuing, profiles. Secret `user-service-secret`
+# (connection string + JWT key) is generated at deploy time, never committed.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: user-service
+  namespace: amcart-services
+automountServiceAccountToken: false   # the app never calls the Kubernetes API
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-service-config
+  namespace: amcart-services
+  labels:
+    app: user-service
+data:
+  ASPNETCORE_ENVIRONMENT: Production
+  ASPNETCORE_HTTP_PORTS: "8080"
+  App__BaseUrl: http://localhost:8080
+  ProductService__BaseUrl: http://product-service.amcart-services.svc.cluster.local:8080
+  Logging__Console__FormatterName: json   # structured logs (section 4.7)
+  DOTNET_EnableDiagnostics: "0"           # no debugger/profiler IPC endpoints
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: amcart-services
+  labels:
+    app: user-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      serviceAccountName: user-service
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654        # "app" user of the .NET images
+        runAsGroup: 1654
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: user-service
+          image: amcart/user-service
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: user-service-config
+            - secretRef:
+                name: user-service-secret
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 384Mi }
+          startupProbe:          # EF Core migrations run at startup
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          livenessProbe:         # TCP only: a database outage must not restart the app
+            tcpSocket: { port: http }
+            periodSeconds: 20
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: amcart-services
+  labels:
+    app: user-service
+spec:
+  type: ClusterIP
+  selector:
+    app: user-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

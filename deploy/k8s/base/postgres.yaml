@@ -1,0 +1,153 @@
+# PostgreSQL 16. The `postgres-credentials` Secret is NOT in Git: deploy/scripts/deploy-minikube.sh
+# generates it at deploy time (section 4.4: secrets supplied at runtime).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: postgres
+  namespace: amcart-databases
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: amcart-databases
+  labels:
+    app: postgres
+data:
+  # Runs once, on first start with an empty data directory.
+  # One login role per service, owning only its own database (least privilege):
+  # a compromised ProductService (e.g. through F1) cannot read the users database.
+  10-create-app-databases.sh: |
+    #!/bin/sh
+    set -eu
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres \
+      -v users_pw="$USERS_DB_PASSWORD" -v products_pw="$PRODUCTS_DB_PASSWORD" <<'EOSQL'
+    CREATE ROLE users_app LOGIN PASSWORD :'users_pw';
+    CREATE ROLE products_app LOGIN PASSWORD :'products_pw';
+    CREATE DATABASE amcart_users OWNER users_app;
+    CREATE DATABASE amcart_products OWNER products_app;
+    REVOKE ALL ON DATABASE amcart_users FROM PUBLIC;
+    REVOKE ALL ON DATABASE amcart_products FROM PUBLIC;
+    EOSQL
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: amcart-databases
+  labels:
+    app: postgres
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: amcart-databases
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      serviceAccountName: postgres
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70          # "postgres" user of the Alpine image
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-credentials, key: POSTGRES_PASSWORD }
+            - name: USERS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-credentials, key: USERS_DB_PASSWORD }
+            - name: PRODUCTS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-credentials, key: PRODUCTS_DB_PASSWORD }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            - name: run            # unix socket + lock file
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: "1", memory: 512Mi }
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, postgres]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: [pg_isready, -U, postgres]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+        - name: init
+          configMap:
+            name: postgres-init
+            defaultMode: 0555
+        - name: run
+          emptyDir:
+            sizeLimit: 16Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: amcart-databases
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

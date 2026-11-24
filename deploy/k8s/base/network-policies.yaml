@@ -1,0 +1,206 @@
+# Network segmentation (section 4.5): deny everything by default, then allow only the flows
+# the application needs. Enforced by Calico.
+#
+#   Internet -> ui:8080 -> user-service:8080 ----> postgres:5432
+#                     \-> product-service:8080 -/
+#               user-service -> product-service:8080   (order history proxy)
+#   every pod -> kube-dns:53
+#
+# Anything not listed (e.g. ui -> postgres, product-service -> Internet, postgres -> anything)
+# is dropped.
+
+# ---------------------------------------------------------------- 1. default deny, per namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: amcart-web
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: amcart-services
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: amcart-databases
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+
+# ---------------------------------------------------------------- 2. DNS for the namespaces that resolve names
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: amcart-web
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: amcart-services
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+
+# ---------------------------------------------------------------- 3. web tier
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ui-allow-public-ingress
+  namespace: amcart-web
+spec:
+  podSelector:
+    matchLabels: { app: ui }
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - { protocol: TCP, port: 8080 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ui-allow-egress-to-services
+  namespace: amcart-web
+spec:
+  podSelector:
+    matchLabels: { app: ui }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: amcart-services }
+          podSelector:
+            matchExpressions:
+              - { key: app, operator: In, values: [user-service, product-service] }
+      ports:
+        - { protocol: TCP, port: 8080 }
+
+# ---------------------------------------------------------------- 4. service tier
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: user-service-allow-ingress-from-ui
+  namespace: amcart-services
+spec:
+  podSelector:
+    matchLabels: { app: user-service }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: amcart-web }
+          podSelector:
+            matchLabels: { app: ui }
+      ports:
+        - { protocol: TCP, port: 8080 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: product-service-allow-ingress
+  namespace: amcart-services
+spec:
+  podSelector:
+    matchLabels: { app: product-service }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: amcart-web }
+          podSelector:
+            matchLabels: { app: ui }
+        - podSelector:             # same namespace: order-history proxy
+            matchLabels: { app: user-service }
+      ports:
+        - { protocol: TCP, port: 8080 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: services-allow-egress-to-postgres
+  namespace: amcart-services
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app, operator: In, values: [user-service, product-service] }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: amcart-databases }
+          podSelector:
+            matchLabels: { app: postgres }
+      ports:
+        - { protocol: TCP, port: 5432 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: user-service-allow-egress-to-product-service
+  namespace: amcart-services
+spec:
+  podSelector:
+    matchLabels: { app: user-service }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app: product-service }
+      ports:
+        - { protocol: TCP, port: 8080 }
+
+# ---------------------------------------------------------------- 5. data tier (no egress at all)
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-allow-ingress-from-services
+  namespace: amcart-databases
+spec:
+  podSelector:
+    matchLabels: { app: postgres }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: amcart-services }
+          podSelector:
+            matchExpressions:
+              - { key: app, operator: In, values: [user-service, product-service] }
+      ports:
+        - { protocol: TCP, port: 5432 }

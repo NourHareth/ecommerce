@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: amcart
+    includeSelectors: false
+resources:
+  - namespaces.yaml
+  - postgres.yaml
+  - user-service.yaml
+  - product-service.yaml
+  - ui.yaml
+  - network-policies.yaml
+# Image tags are set per environment by deploy/scripts/deploy-minikube.sh (git commit SHA, never :latest).

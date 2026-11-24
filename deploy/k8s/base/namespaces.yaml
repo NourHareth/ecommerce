@@ -1,0 +1,33 @@
+# One namespace per tier, so network segmentation and access control follow the architecture.
+# Pod Security Admission "restricted" is the built-in first admission layer:
+# the API server itself refuses pods running as root, privileged pods, added capabilities,
+# host namespaces or hostPath volumes. Kyverno (deploy/k8s/policies) adds the rules PSA lacks.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: amcart-web
+  labels:
+    app.kubernetes.io/part-of: amcart
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: amcart-services
+  labels:
+    app.kubernetes.io/part-of: amcart
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: amcart-databases
+  labels:
+    app.kubernetes.io/part-of: amcart
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
