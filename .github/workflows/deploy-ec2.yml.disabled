@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  AWS_REGION: ap-south-1
+  AWS_REGION: us-east-1
   ECR_USER_REPO: amcart/user-service
   ECR_PRODUCT_REPO: amcart/product-service
   ECR_UI_REPO: amcart/ui

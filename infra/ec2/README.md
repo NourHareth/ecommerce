@@ -1,6 +1,6 @@
-# Single EC2 deployment (AmCart UserService + UI)
+# Single EC2 deployment (AmCart services)
 
-Docker Compose stack: **PostgreSQL**, **UserService** (ECR image), **UI** (nginx + SPA, ECR image). Nginx in the UI container proxies `/api` to UserService; see [`nginx/default.conf`](nginx/default.conf).
+Docker Compose stack: **PostgreSQL**, **UserService**, **ProductService**, and **UI** (nginx + SPA), with application images stored in ECR. Nginx in the UI container proxies `/api` to UserService; see [`nginx/default.conf`](nginx/default.conf).
 
 ## 1. AWS prerequisites (one-time)
 
@@ -12,9 +12,10 @@ Docker Compose stack: **PostgreSQL**, **UserService** (ECR image), **UI** (nginx
 
 ### ECR repositories
 
-Create two repositories in your region (e.g. `us-east-1`):
+Create three repositories in your AWS region (this project currently uses `us-east-1`):
 
 - `amcart/user-service`
+- `amcart/product-service`
 - `amcart/ui`
 
 Note the **registry URL**: `<account_id>.dkr.ecr.<region>.amazonaws.com`.
@@ -57,7 +58,7 @@ Install **AWS CLI v2** if not present (needed for `aws ecr get-login-password` o
    - **AmazonEC2ContainerRegistryPowerUser** (push images from CI), or tighter `ecr:BatchCheckLayerAvailability`, `ecr:GetDownloadUrlForLayer`, `ecr:BatchGetImage`, `ecr:PutImage`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`
 3. Copy the role **ARN** into GitHub secret **`AWS_ROLE_ARN`**.
 
-Alternative (simpler, less ideal): IAM user with access keys in **`AWS_ACCESS_KEY_ID`** / **`AWS_SECRET_ACCESS_KEY`**. Replace the OIDC step in [`.github/workflows/deploy-ec2.yml`](../../.github/workflows/deploy-ec2.yml) with the `aws-access-key-id` / `aws-secret-access-key` form (comment at top of that file).
+Alternative (simpler, less ideal): IAM user with access keys in **`AWS_ACCESS_KEY_ID`** / **`AWS_SECRET_ACCESS_KEY`**. Replace the OIDC step in [`.github/workflows/deploy-ec2.yml.disabled`](../../.github/workflows/deploy-ec2.yml.disabled) with the `aws-access-key-id` / `aws-secret-access-key` form (comment at top of that file).
 
 ### GitHub repository secrets (deploy workflow)
 
@@ -148,7 +149,7 @@ The `start` command waits for the instance to be running, gets the new IP, and u
 ## 4. CI/CD
 
 - **CI:** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — `dotnet test` + UI `npm run build` on PR/push.
-- **Deploy:** [`.github/workflows/deploy-ec2.yml`](../../.github/workflows/deploy-ec2.yml) — on push to `main`, build/push images to ECR, SSH to EC2, `docker compose pull` + `up -d` with **`GITHUB_SHA`** image tags.
+- **Deploy:** [`.github/workflows/deploy-ec2.yml.disabled`](../../.github/workflows/deploy-ec2.yml.disabled) — on push to `main`, build/push images to ECR, SSH to EC2, `docker compose pull` + `up -d` with **`GITHUB_SHA`** image tags.
 
 Ensure ECR repositories exist before the first deploy run.
 
@@ -156,6 +157,7 @@ Ensure ECR repositories exist before the first deploy run.
 
 ```bash
 docker build -f src/Services/UserService/Dockerfile -t user-service:local src
+docker build -f src/Services/ProductService/Dockerfile -t product-service:local src
 docker build -f src/Frontends/ui-app/Dockerfile -t ui:local src/Frontends/ui-app
 ```
 
