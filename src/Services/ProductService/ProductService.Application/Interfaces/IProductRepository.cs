@@ -35,6 +35,9 @@ public interface IProductRepository
         ProductStockFilter stockFilter = ProductStockFilter.None,
         CancellationToken ct = default);
 
+    /// <summary>Storefront quick-search by product name (autocomplete box).</summary>
+    Task<IReadOnlyList<ProductSearchHitDto>> QuickSearchAsync(string term, CancellationToken ct = default);
+
     Task<IReadOnlyList<Product>> GetFeaturedAsync(int count, CancellationToken ct = default);
     Task<IReadOnlyList<Product>> GetByCategoryIdAsync(Guid categoryId, CancellationToken ct = default);
     Task<IReadOnlyList<Product>> GetByBrandIdAsync(Guid brandId, CancellationToken ct = default);

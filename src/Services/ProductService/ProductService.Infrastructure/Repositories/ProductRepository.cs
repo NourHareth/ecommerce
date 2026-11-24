@@ -47,6 +47,17 @@ public class ProductRepository : IProductRepository
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<ProductSearchHitDto>> QuickSearchAsync(string term, CancellationToken ct = default)
+    {
+        var sql = "SELECT id AS \"Id\", name AS \"Name\", slug AS \"Slug\", price AS \"Price\" " +
+                  "FROM products WHERE status = 'active' AND deleted_at IS NULL " +
+                  "AND name ILIKE '%" + term + "%' ORDER BY name LIMIT 20";
+
+        return await _db.Database
+            .SqlQueryRaw<ProductSearchHitDto>(sql)
+            .ToListAsync(ct);
+    }
+
     public async Task<Product?> GetByIdAsync(Guid id, bool publicOnly = false, CancellationToken ct = default)
     {
         var query = ProductBaseQuery(_db.Products)

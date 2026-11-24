@@ -44,6 +44,6 @@ public class OrderRepository : IOrderRepository
             .Include(o => o.Items)
             .ThenInclude(i => i.Product)
             .ThenInclude(p => p!.Images)
-            .FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == userId, ct);
+            .FirstOrDefaultAsync(o => o.Id == orderId, ct);
     }
 }

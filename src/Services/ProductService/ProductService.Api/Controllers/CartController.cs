@@ -43,7 +43,7 @@ public class CartController : ControllerBase
 
         try
         {
-            var dto = await _cart.AddItemAsync(userId, sessionId, body.ProductId, body.Quantity < 1 ? 1 : body.Quantity, ct);
+            var dto = await _cart.AddItemAsync(userId, sessionId, body.ProductId, body.Quantity < 1 ? 1 : body.Quantity, body.UnitPrice, ct);
             return Ok(new { success = true, data = dto });
         }
         catch (InvalidOperationException ex)

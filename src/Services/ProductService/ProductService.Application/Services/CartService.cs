@@ -24,7 +24,7 @@ public class CartService : ICartService
         return await BuildCartDtoAsync(cart.Id, ct);
     }
 
-    public async Task<CartDto> AddItemAsync(Guid? userId, string? sessionId, Guid productId, int quantity, CancellationToken ct = default)
+    public async Task<CartDto> AddItemAsync(Guid? userId, string? sessionId, Guid productId, int quantity, decimal? displayedUnitPrice = null, CancellationToken ct = default)
     {
         if (quantity < 1)
             throw new InvalidOperationException("Quantity must be at least 1.");
@@ -34,7 +34,7 @@ public class CartService : ICartService
             throw new InvalidOperationException("Product not found or is not available for the storefront.");
 
         var cart = await _carts.GetOrCreateAsync(userId, sessionId, ct);
-        var unitPrice = product.Price;
+        var unitPrice = displayedUnitPrice ?? product.Price;
 
         var existing = await _carts.FindItemAsync(cart.Id, productId, ct);
         var newQty = (existing?.Quantity ?? 0) + quantity;
@@ -205,7 +205,7 @@ public class CartService : ICartService
         {
             var p = row.Product;
             var available = p != null && p.Status == "active";
-            var unitPrice = available ? p!.Price : 0m;
+            var unitPrice = available ? row.UnitPrice : 0m;
             var compareAt = available ? p!.CompareAtPrice : null;
             if (available && p!.Currency != null)
                 currency = p.Currency;
