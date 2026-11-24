@@ -1,0 +1,16 @@
+# 2026-11-24 · main = 84f818d · poste de développement → GitHub
+# Contexte : ruleset "protect-main" (id 28027598) actif, définition dans .github/rulesets/protect-main.json
+# Commande : commit vide au-dessus de origin/main, puis push direct sur main
+
+$ git switch -c tmp/push-test origin/main
+$ git commit --allow-empty -m "test: direct push to main (must be rejected)"
+$ git push origin HEAD:main
+remote: error: GH013: Repository rule violations found for refs/heads/main.
+remote: Review all repository rules at https://github.com/NourHareth/ecommerce/rules?ref=refs%2Fheads%2Fmain
+remote:
+remote: - Changes must be made through a pull request.
+remote:
+exit code: 1
+
+# Résultat : push refusé, main inchangé (84f818d). La branche temporaire locale a été supprimée.
+# Conséquence : un contrôle de sécurité rouge ne peut pas être contourné par un push direct.
