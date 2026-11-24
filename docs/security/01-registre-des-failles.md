@@ -130,11 +130,23 @@ l'étape SCA bloque le pipeline, et le rapport le dit explicitement.
 
 ## Suivi
 
-| ID | Documentée | Démontrée | Corrigée | Vérifiée après correction |
-|----|-----------|-----------|----------|---------------------------|
-| F1 | ✅ | ⬜ | ⬜ | ⬜ |
-| F2 | ✅ | ⬜ | ⬜ | ⬜ |
-| F3 | ✅ | ⬜ | ⬜ | ⬜ |
-| F4 | ✅ | ⬜ | ⬜ | ⬜ |
-| F5 | ✅ | ⬜ | ⬜ | ⬜ |
-| F6 | ✅ | ⬜ | ⬜ | ⬜ |
+Exécution de référence du pipeline bloquant, sur la base vulnérable :
+[CI #45490691771](https://github.com/NourHareth/ecommerce/actions/runs/45490691771), commit `2e9a65b`.
+
+| ID | Documentée | Démontrée | Preuve | Corrigée | Vérifiée après correction |
+|----|-----------|-----------|--------|----------|---------------------------|
+| F1 | ✅ | ✅ statique, ⬜ dynamique | job *SAST* : règle `efcore-raw-sql-non-constant`, `ProductRepository.cs` | ⬜ | ⬜ |
+| F2 | ✅ | ⬜ | invisible en statique : attend le DAST | ⬜ | ⬜ |
+| F3 | ✅ | ⬜ | invisible en statique : attend le DAST | ⬜ | ⬜ |
+| F4 | ✅ | ✅ | job *Dependencies* : CVE-2023-46233, CRITICAL | ⬜ | ⬜ |
+| F5 | ✅ | ✅ | job *Secrets* (historique complet, caviardé) + jobs *Image user/product* : secrets dans `/app/appsettings.json` | ⬜ | ⬜ |
+| F6 | ✅ | ✅ | job *IaC* : DS-0002 sur le Dockerfile UI + job *Image ui* : « runs as root » | ⬜ | ⬜ |
+
+### Constats supplémentaires du pipeline (non introduits volontairement)
+
+| ID | Constat | Source | Traitement prévu |
+|----|---------|--------|------------------|
+| C1 | Image UI basée sur `nginx:1.27-alpine` (Alpine 3.21.3, obsolète) : 70 CVE corrigeables, dont 3 CRITICAL | job *Image ui* | Résolu avec F6 par le passage à `nginx-unprivileged:1.31-alpine` |
+| C2 | Manifestes Kubernetes sans `securityContext` (KSV-0014, KSV-0118), y compris PostgreSQL et la passerelle | job *IaC* | Phase « déploiement durci » (§4.5) |
+| C3 | KSV-0109 sur la ConfigMap UserService : **faux positif**, les clés `Jwt__Issuer`, `Jwt__Audience` et les durées ne sont pas secrètes | job *IaC* | Exception documentée lors de la réécriture des manifestes |
+| C4 | Faux positif de notre propre règle Gitleaks `jwt-signing-secret` sur une référence de variable `${JWT_SECRET:?…}` | job *Secrets* | Règle corrigée (une valeur commençant par `$` n'est pas un secret) |

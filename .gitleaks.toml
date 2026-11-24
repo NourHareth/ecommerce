@@ -17,7 +17,8 @@ keywords = ["password="]
 [[rules]]
 id = "jwt-signing-secret"
 description = "JWT signing secret in configuration (JSON, YAML or env)"
-regex = '''(?i)(?:"secret"|jwt__secret|jwt_secret)\s*[:=]\s*"?([^"\s]{16,})"?'''
+# The value must not start with "$": `${JWT_SECRET:?...}` is a variable reference, not a secret.
+regex = '''(?i)(?:"secret"|jwt__secret|jwt_secret)\s*[:=]\s*"?([^"\s$][^"\s]{15,})"?'''
 secretGroup = 1
 keywords = ["secret"]
 
