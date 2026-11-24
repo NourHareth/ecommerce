@@ -1,0 +1,16 @@
+# Trivy exceptions (dependencies, images, IaC). Policy: docs/security/03-politique-de-blocage.md §3.
+#
+# Every entry must be scoped as narrowly as possible (paths / purls), carry an expiry date
+# (`expired_at`: Trivy ignores the exception by itself afterwards) and a statement starting with its
+# EXC-NNN id. The same id is listed in docs/security/04-registre-des-exceptions.md.
+# Ceilings: CRITICAL 7 days, HIGH 30 days. Real secrets are never an exception.
+
+misconfigurations:
+  - id: KSV-0109
+    paths:
+      - "deploy/k8s/base/postgres.yaml"
+    expired_at: 2026-12-24
+    statement: >-
+      EXC-001 false positive. The postgres-init ConfigMap contains `LOGIN PASSWORD :'users_pw'`, a psql
+      variable reference; the values come from the postgres-credentials Secret at runtime.
+      Scoped to this file so KSV-0109 still catches real secrets in any other ConfigMap.

@@ -22,6 +22,8 @@ env:
   TRIVY_VERSION: v0.76.2
   SEMGREP_IMAGE: semgrep/semgrep:1.186.0
   GITLEAKS_IMAGE: zricethezav/gitleaks:v8.30.1
+  # Read by every Trivy step. YAML format = exceptions scoped by path, with expiry and justification.
+  TRIVY_IGNOREFILE: .trivyignore.yaml
 
 jobs:
   # ------------------------------------------------------------------ build & tests
@@ -101,7 +103,6 @@ jobs:
           scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          trivyignores: .trivyignore
           format: table
           exit-code: "1"
       - uses: actions/upload-artifact@v7
@@ -142,7 +143,6 @@ jobs:
           scan-type: config
           scan-ref: .
           severity: HIGH,CRITICAL
-          trivyignores: .trivyignore
           format: table
           exit-code: "1"
 
@@ -186,7 +186,6 @@ jobs:
           scanners: vuln,secret
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          trivyignores: .trivyignore
           format: table
           exit-code: "1"
       # The gates below run even if the CVE gate failed, so every result is reported.

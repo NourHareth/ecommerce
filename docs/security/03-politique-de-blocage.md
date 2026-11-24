@@ -62,8 +62,9 @@ Une exception n'est acceptée que si les **quatre** conditions suivantes sont re
 1. elle est **inscrite** dans `docs/security/04-registre-des-exceptions.md`, avec un identifiant
    `EXC-NNN`, l'outil, la règle ou la CVE, la justification, le responsable et la date d'expiration ;
 2. elle est **matérialisée au plus près de la règle** :
-   - Trivy : ligne dans `.trivyignore` avec `exp:AAAA-MM-JJ` (Trivy ignore l'exception d'elle-même
-     après cette date) ;
+   - Trivy : entrée dans `.trivyignore.yaml`, **limitée par chemin** (`paths`) ou par paquet (`purls`),
+     avec `expired_at` (Trivy ignore l'exception d'elle-même après cette date) et un `statement`
+     qui commence par l'identifiant `EXC-NNN` ;
    - Semgrep : commentaire `// nosemgrep: <id-de-règle>` suivi de la référence `EXC-NNN` ;
    - Gitleaks : uniquement pour un **faux positif avéré** (empreinte dans `.gitleaksignore`). Un vrai
      secret n'est **jamais** une exception : il est révoqué, puis purgé ;
