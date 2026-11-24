@@ -21,7 +21,7 @@ l'application en marche :
 
 | Test | Outil | Casse le build si… |
 |------|-------|--------------------|
-| Scan authentifié des deux API, via la passerelle nginx | OWASP ZAP 2.17.0 (`zap-api-scan`, jeton d'un client de test) | au moins une alerte de risque **High** |
+| Scan authentifié des deux API, via la passerelle nginx | OWASP ZAP 2.17.0 (`zap-api-scan`, jeton d'un client de test) | une alerte de risque **High** avec **preuve** (erreur de base de données, délai, charge confirmée). Les injections SQL seulement **déduites** par comparaison de pages, sans aucune preuve, sont listées pour tri mais ne bloquent pas (EXC-002) |
 | Contrôles de logique métier : propriété des commandes (F2), prix calculé côté serveur (F3) | `tests/dast/business-logic.sh` | un contrôle échoue |
 
 *Pourquoi deux types de tests ?* Un scanner générique ne sait pas que la commande d'Alice ne doit pas être
@@ -29,6 +29,21 @@ lisible par Bob, ni quel est le « bon » prix. Ces failles de logique (F2, F3) 
 connaissent les règles métier. *Pourquoi seulement High pour ZAP ?* Pour la même raison que pour le
 SCA : les alertes Medium et Low d'un scan d'API (en-têtes, informations) sont nombreuses et souvent
 sans impact. Elles restent dans le rapport et sont revues.
+
+*Pourquoi ne pas bloquer sur toute alerte High de ZAP ?* Le premier scan a produit 115 alertes
+« SQL Injection » :
+
+- **1 seule** reposait sur une preuve : sur `quick-search [q]`, une simple apostrophe provoque une
+  erreur 500 de PostgreSQL (F1) ;
+- les **114 autres** sont de pures déductions. ZAP compare les réponses obtenues avec `AND 1=1` et
+  `AND 1=2`, ou avec `22-2` et `20`, sur des endpoints qui n'utilisent que LINQ (requêtes paramétrées
+  par EF Core). Ces réponses varient d'une requête à l'autre (horodatages, identifiants générés,
+  erreurs de validation), ce qui trompe la comparaison.
+
+Bloquer sur ces 114 alertes rendrait le contrôle rouge en permanence, donc inutile. La limite est
+assumée : une injection SQL « aveugle » réelle pourrait passer ce filtre. Elle est couverte par la
+règle SAST `efcore-raw-sql-non-constant` (toute requête SQL brute non constante bloque) et par la revue
+de code.
 
 *Pourquoi le DAST ne dépend-il pas des contrôles statiques ?* L'environnement est jetable et isolé : y
 déployer un build vulnérable pour le tester ne présente pas de risque, c'est même son rôle. La décision
