@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- Lock files pin every direct and transitive NuGet package, so builds are
+         reproducible and the dependency scanner (Trivy) can read the full .NET graph. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+</Project>
