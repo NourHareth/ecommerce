@@ -58,7 +58,7 @@ public class CheckoutRepository : ICheckoutRepository
                     throw new InvalidOperationException(
                         $"Insufficient stock for \"{p.Name}\". Only {p.Quantity} unit(s) available.");
 
-                var unit = line.UnitPrice;
+                var unit = p.Price;   // charged at catalog price (F3)
                 subtotal += unit * line.Quantity;
                 if (!string.IsNullOrEmpty(p.Currency))
                     currency = p.Currency;
@@ -126,7 +126,7 @@ public class CheckoutRepository : ICheckoutRepository
             foreach (var line in cart.Items)
             {
                 var p = line.Product!;
-                var unit = line.UnitPrice;
+                var unit = p.Price;
                 var lineTotal = unit * line.Quantity;
 
                 order.Items.Add(new OrderItem

@@ -30,8 +30,7 @@ public class AddCartItemRequest
 {
     public Guid ProductId { get; set; }
     public int Quantity { get; set; } = 1;
-    /// <summary>Price shown on the product page when the user clicked "Add to cart" (keeps promo prices stable).</summary>
-    public decimal? UnitPrice { get; set; }
+    // No price here on purpose (F3): the price is always read from the catalog on the server.
 }
 
 public class UpdateCartItemRequest
