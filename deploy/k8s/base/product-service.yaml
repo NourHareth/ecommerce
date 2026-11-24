@@ -39,6 +39,9 @@ spec:
     spec:
       serviceAccountName: product-service
       automountServiceAccountToken: false
+      dnsConfig:
+        options:
+          - { name: ndots, value: "2" }   # see deploy/README.md "DNS": FQDNs resolved directly
       securityContext:
         runAsNonRoot: true
         runAsUser: 1654
@@ -71,13 +74,16 @@ spec:
           startupProbe:
             httpGet: { path: /health, port: http }
             periodSeconds: 5
+            timeoutSeconds: 3
             failureThreshold: 36
           readinessProbe:
             httpGet: { path: /health, port: http }
             periodSeconds: 10
+            timeoutSeconds: 3
           livenessProbe:
             tcpSocket: { port: http }
             periodSeconds: 20
+            timeoutSeconds: 3
       volumes:
         - name: tmp
           emptyDir:

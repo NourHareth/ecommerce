@@ -111,6 +111,38 @@ namespaces labellisés `app.kubernetes.io/part-of=amcart` pour ne pas bloquer le
 - **B.** les flux nécessaires passent, les flux interdits sont bloqués ;
 - **C.** la boutique reste joignable de bout en bout après la segmentation.
 
+## DNS : `ndots: 2` (constat du premier déploiement)
+
+**Symptôme observé sur la VM :**
+- nginx (image Alpine) redémarrait en boucle avec `host not found in upstream` ;
+- les services .NET n'étaient jamais *Ready* : chaque résolution de nom prenait environ 6 s, au-delà
+  du délai de la sonde.
+
+Pourtant, `nslookup` fonctionnait depuis les mêmes namespaces, avec les mêmes NetworkPolicies.
+
+**Cause :**
+- Le `resolv.conf` de la VM contient `search localdomain` (réseau NAT de VMware). Kubernetes ajoute ce
+  suffixe à la liste de recherche des pods.
+- Avec l'option par défaut `ndots:5`, un nom à 4 points comme
+  `postgres.amcart-databases.svc.cluster.local` est d'abord essayé avec chaque suffixe, dont
+  `…cluster.local.localdomain`. CoreDNS transmet cette requête au DNS externe de la VM, qui répond mal.
+- glibc (images .NET) finit par aboutir, au bout d'environ 6 s par résolution.
+- musl (image Alpine de nginx) **abandonne** dès qu'une requête de suffixe échoue.
+
+**Correctif :** `dnsConfig.options: ndots=2` sur les pods applicatifs. Nos noms complets ayant plus de
+2 points, ils sont résolus directement, sans passer par la liste de recherche.
+
+**Effets de bord :**
+- moins de requêtes DNS ;
+- **les noms internes du cluster ne partent plus vers le résolveur externe**, ce qui supprime une
+  fuite d'information.
+
+Les délais des sondes passent aussi de 1 s (valeur par défaut) à 3 s, car `/health` inclut un aller-retour
+vers la base.
+
+Le problème n'apparaissait pas dans la CI : les runners GitHub n'ont pas ce suffixe de recherche. C'est
+un exemple d'écart entre environnements que seul un déploiement réel révèle.
+
 ## Limites
 
 - `port-forward` sert à la démonstration. Le trafic qu'il transporte entre par le kubelet et n'est pas
