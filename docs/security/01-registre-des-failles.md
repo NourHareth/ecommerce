@@ -138,15 +138,15 @@ Exécution de référence du pipeline bloquant, sur la base vulnérable :
 | F1 | ✅ | ✅ statique, ⬜ dynamique | job *SAST* : règle `efcore-raw-sql-non-constant`, `ProductRepository.cs` | ⬜ | ⬜ |
 | F2 | ✅ | ⬜ | invisible en statique : attend le DAST | ⬜ | ⬜ |
 | F3 | ✅ | ⬜ | invisible en statique : attend le DAST | ⬜ | ⬜ |
-| F4 | ✅ | ✅ | job *Dependencies* : CVE-2023-46233, CRITICAL | ⬜ | ⬜ |
+| F4 | ✅ | ✅ | job *Dependencies* : CVE-2023-46233, CRITICAL | ✅ `9a646c2` : dépendance retirée (inutilisée) | ✅ job *Dependencies* vert ([CI #45492295507](https://github.com/NourHareth/ecommerce/actions/runs/45492295507)) |
 | F5 | ✅ | ✅ | job *Secrets* (historique complet, caviardé) + jobs *Image user/product* : secrets dans `/app/appsettings.json` | ⬜ | ⬜ |
-| F6 | ✅ | ✅ | job *IaC* : DS-0002 sur le Dockerfile UI + job *Image ui* : « runs as root » | ⬜ | ⬜ |
+| F6 | ✅ | ✅ | job *IaC* : DS-0002 sur le Dockerfile UI + job *Image ui* : « runs as root » | ✅ image : `f405e97` (nginx-unprivileged, `USER 101`, port 8080, écritures limitées à `/tmp`) · ⬜ Kubernetes : `securityContext` + Kyverno | ✅ image ([CI #45493010532](https://github.com/NourHareth/ecommerce/actions/runs/45493010532)) : job *Image ui* vert, conteneur démarré en lecture seule, sans capacité, UID ≠ 0, sert la SPA avec l'en-tête CSP. Dockerfile UI : 0 mauvaise configuration · ⬜ admission |
 
 ### Constats supplémentaires du pipeline (non introduits volontairement)
 
 | ID | Constat | Source | Traitement prévu |
 |----|---------|--------|------------------|
-| C1 | Image UI basée sur `nginx:1.27-alpine` (Alpine 3.21.3, obsolète) : 70 CVE corrigeables, dont 3 CRITICAL | job *Image ui* | Résolu avec F6 par le passage à `nginx-unprivileged:1.31-alpine` |
+| C1 | Image UI basée sur `nginx:1.27-alpine` (Alpine 3.21.3, obsolète) : 70 CVE corrigeables, dont 3 CRITICAL | job *Image ui* | ✅ Résolu. Le passage à `nginx-unprivileged:1.31-alpine` (Alpine 3.24.2) ramène le compte à 14 : l'image de base publiée est en retard sur les correctifs Alpine. Un `apk upgrade` au build (`fe14009`) l'amène à 0 |
 | C2 | Manifestes Kubernetes sans `securityContext` (KSV-0014, KSV-0118), y compris PostgreSQL et la passerelle | job *IaC* | Phase « déploiement durci » (§4.5) |
 | C3 | KSV-0109 sur la ConfigMap UserService : **faux positif**, les clés `Jwt__Issuer`, `Jwt__Audience` et les durées ne sont pas secrètes | job *IaC* | Exception documentée lors de la réécriture des manifestes |
 | C4 | Faux positif de notre propre règle Gitleaks `jwt-signing-secret` sur une référence de variable `${JWT_SECRET:?…}` | job *Secrets* | Règle corrigée (une valeur commençant par `$` n'est pas un secret) |
