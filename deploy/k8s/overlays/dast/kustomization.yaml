@@ -1,0 +1,22 @@
+# Disposable DAST environment (kind cluster inside CI): same hardened base, plus
+#  - the OpenAPI documents exposed for the scanner (Swagger__ExposeSpec);
+#  - 2-hour access tokens so the authenticated scan does not expire mid-run.
+# Never deployed outside the test pipeline.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+patches:
+  - target: { kind: ConfigMap, name: user-service-config }
+    patch: |-
+      - op: add
+        path: /data/Swagger__ExposeSpec
+        value: "true"
+      - op: add
+        path: /data/Jwt__AccessTokenExpiryMinutes
+        value: "120"
+  - target: { kind: ConfigMap, name: product-service-config }
+    patch: |-
+      - op: add
+        path: /data/Swagger__ExposeSpec
+        value: "true"
