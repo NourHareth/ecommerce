@@ -1,156 +1,219 @@
 name: CI
 
+# Blocking policy: docs/security/03-politique-de-blocage.md
+# Every job named "Security · ..." can fail the build. `security-gate` succeeds only
+# if all of them pass, and later stages (deploy, DAST) depend on it.
+
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
-  user-service:
-    name: UserService (.NET)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .
-    steps:
-      - uses: actions/checkout@v4
+env:
+  TRIVY_VERSION: v0.76.2
+  SEMGREP_IMAGE: semgrep/semgrep:1.186.0
+  GITLEAKS_IMAGE: zricethezav/gitleaks:v8.30.1
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+jobs:
+  # ------------------------------------------------------------------ build & tests
+  dotnet:
+    name: Build & test (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
+      - run: dotnet restore src/AmCart.sln --locked-mode
+      - run: dotnet build src/AmCart.sln -c Release --no-restore
+      - run: dotnet test src/AmCart.sln -c Release --no-build
 
-      - name: Restore, build, test
-        run: |
-          dotnet restore src/AmCart.sln
-          dotnet build src/AmCart.sln -c Release --no-restore
-          dotnet test src/AmCart.sln -c Release --no-build --verbosity normal
-
-  ui-app:
-    name: ui-app (Node)
+  ui:
+    name: Build (React)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: src/Frontends/ui-app
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: src/Frontends/ui-app/package-lock.json
+      - run: npm ci
+      - run: npm run build
 
-      - name: Install and build
-        run: |
-          npm ci
-          npm run build
-
-  dockerfile-smoke:
-    name: Docker build smoke
+  # ------------------------------------------------------------------ security stage
+  sast:
+    name: "Security · SAST (Semgrep)"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build UserService image
-        uses: docker/build-push-action@v6
-        with:
-          context: src
-          file: src/Services/UserService/Dockerfile
-          push: false
-          tags: user-service:ci
-
-      - name: Build ProductService image
-        uses: docker/build-push-action@v6
-        with:
-          context: src
-          file: src/Services/ProductService/Dockerfile
-          push: false
-          load: true
-          tags: product-service:ci
-
-      - name: Verify ProductService runtime hardening
+      - uses: actions/checkout@v7
+      - name: Full report (all severities, informational)
         run: |
-          docker run --rm \
-            --read-only \
-            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,uid=1654,gid=1654 \
-            --memory=512m \
-            --cpus=1.0 \
-            --cap-drop ALL \
-            --security-opt no-new-privileges:true \
-            --entrypoint sh product-service:ci -c '
-              test "$(id -u)" -ne 0 &&
-              grep -Eq "^CapEff:[[:space:]]+0+$" /proc/self/status &&
-              grep -Eq "^NoNewPrivs:[[:space:]]+1$" /proc/self/status &&
-              touch /tmp/test-write &&
-              rm /tmp/test-write &&
-              if touch /app/test-write 2>/dev/null; then
-                echo APP_WRITABLE_UNEXPECTED
-                exit 1
-              else
-                echo PRODUCT_SERVICE_HARDENING_OK
-              fi
-            '
-
-      - name: Build UI image
-        uses: docker/build-push-action@v6
+          docker run --rm -v "$PWD:/src" -w /src "$SEMGREP_IMAGE" \
+            semgrep scan --config p/csharp --config p/typescript --config p/react --config .semgrep/ \
+            --metrics off --sarif --output semgrep.sarif
+      - name: Gate (fails on ERROR findings)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$SEMGREP_IMAGE" \
+            semgrep scan --config p/csharp --config p/typescript --config p/react --config .semgrep/ \
+            --metrics off --severity ERROR --error
+      - uses: actions/upload-artifact@v7
+        if: always()
         with:
-          context: src/Frontends/ui-app
-          file: src/Frontends/ui-app/Dockerfile
-          push: false
-          tags: ui:ci
+          name: semgrep-report
+          path: semgrep.sarif
+          retention-days: 30
 
-  security-scan:
-    name: Trivy Vulnerability Scan
+  sca:
+    name: "Security · Dependencies (Trivy fs)"
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Run Trivy filesystem scan
+      - uses: actions/checkout@v7
+      - name: Full report (JSON, informational)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          format: json
+          output: trivy-sca.json
+          exit-code: "0"
+      - name: Gate (fails on fixable HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          skip-setup-trivy: true
           scan-type: fs
           scan-ref: .
           scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          format: json
-          output: trivy-report.json
-          exit-code: '0'
-
-      - name: Upload Trivy report
-        uses: actions/upload-artifact@v4
+          trivyignores: .trivyignore
+          format: table
+          exit-code: "1"
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: trivy-vulnerability-report
-          path: trivy-report.json
+          name: trivy-sca-report
+          path: trivy-sca.json
           retention-days: 30
 
-  secret-scan:
-    name: Gitleaks Secret Scan
+  secrets:
+    name: "Security · Secrets (Gitleaks, full history)"
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
-      - name: Checkout full history
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Gitleaks over every commit, values redacted
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" "$GITLEAKS_IMAGE" \
+            git /repo --config /repo/.gitleaks.toml --redact --verbose --no-banner \
+            --report-format sarif --report-path /repo/gitleaks.sarif --exit-code 1
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: gitleaks-report
+          path: gitleaks.sarif
+          retention-days: 30
 
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_ENABLE_COMMENTS: false
+  iac:
+    name: "Security · IaC (Trivy config)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Gate (fails on HIGH/CRITICAL misconfigurations)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          trivyignores: .trivyignore
+          format: table
+          exit-code: "1"
+
+  images:
+    name: "Security · Image ${{ matrix.name }} (Trivy image)"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: user-service
+            context: src
+            file: src/Services/UserService/Dockerfile
+          - name: product-service
+            context: src
+            file: src/Services/ProductService/Dockerfile
+          - name: ui
+            context: src/Frontends/ui-app
+            file: src/Frontends/ui-app/Dockerfile
+    env:
+      IMAGE: amcart/${{ matrix.name }}:${{ github.sha }}
+      TRIVY_SECRET_CONFIG: trivy-secret.yaml
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: false
+          load: true
+          tags: ${{ env.IMAGE }}
+      - name: Gate (fails on fixable HIGH/CRITICAL CVEs or any embedded secret)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: image
+          image-ref: ${{ env.IMAGE }}
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          format: table
+          exit-code: "1"
+      - name: Gate (image must not run as root)
+        if: success() || failure()
+        run: |
+          user="$(docker image inspect --format '{{.Config.User}}' "$IMAGE")"
+          echo "Configured user: '${user:-<none, defaults to root>}'"
+          case "$user" in
+            ""|root|0|0:*|root:*) echo "::error::$IMAGE runs as root"; exit 1 ;;
+          esac
+      - name: Verify runtime hardening (.NET services)
+        if: matrix.name != 'ui'
+        run: |
+          docker run --rm --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m,uid=1654,gid=1654 \
+            --memory=512m --cpus=1.0 --cap-drop ALL --security-opt no-new-privileges:true \
+            --entrypoint sh "$IMAGE" -c '
+              test "$(id -u)" -ne 0 &&
+              grep -Eq "^CapEff:[[:space:]]+0+$" /proc/self/status &&
+              grep -Eq "^NoNewPrivs:[[:space:]]+1$" /proc/self/status &&
+              touch /tmp/probe && rm /tmp/probe &&
+              if touch /app/probe 2>/dev/null; then echo "::error::/app is writable"; exit 1; fi &&
+              echo RUNTIME_HARDENING_OK'
+
+  # ------------------------------------------------------------------ gate
+  security-gate:
+    name: Security gate
+    needs: [dotnet, ui, sast, sca, secrets, iac, images]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "All blocking security controls passed for ${{ github.sha }}."

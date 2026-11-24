@@ -1,0 +1,34 @@
+# Gitleaks configuration: default rules + rules for secrets the defaults miss.
+# The default rules rely on entropy, so low-entropy but real secrets
+# (human-chosen passwords, long readable signing keys) slip through. See flaw F5.
+
+title = "AmCart gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "db-connection-string-password"
+description = "Password inside a database connection string"
+regex = '''(?i)(?:host|server|data source)=[^"\n]*?;\s*password=([^;"'\s]+)'''
+secretGroup = 1
+keywords = ["password="]
+
+[[rules]]
+id = "jwt-signing-secret"
+description = "JWT signing secret in configuration (JSON, YAML or env)"
+regex = '''(?i)(?:"secret"|jwt__secret|jwt_secret)\s*[:=]\s*"?([^"\s]{16,})"?'''
+secretGroup = 1
+keywords = ["secret"]
+
+[[rules]]
+id = "postgres-password-variable"
+description = "PostgreSQL password set as a literal value"
+regex = '''(?i)postgres_password\s*[:=]\s*["']?([A-Za-z0-9_\-.!@#%^&*+]{6,})'''
+secretGroup = 1
+keywords = ["postgres_password"]
+
+# Placeholders are not secrets.
+[[allowlists]]
+description = "Documented placeholders"
+regexes = ['''replace-with-''', '''<[A-Z0-9_]+>''', '''CHANGE_ME''']

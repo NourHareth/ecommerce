@@ -1,0 +1,11 @@
+# Trivy exceptions (dependency, image and IaC findings).
+#
+# Rules (docs/security/03-politique-de-blocage.md):
+#  - every line needs an expiry date (exp:YYYY-MM-DD) and a comment above it
+#    with: exception ID, reason, owner;
+#  - CRITICAL: 7 days max, HIGH: 30 days max;
+#  - the same exception is also listed in docs/security/04-registre-des-exceptions.md.
+#
+# Example:
+# EXC-001 | false positive: code path not reachable | owner: Nour
+# CVE-0000-00000 exp:2026-12-31

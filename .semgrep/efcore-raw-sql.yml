@@ -1,0 +1,23 @@
+rules:
+  - id: efcore-raw-sql-non-constant
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A non-constant string is passed to an EF Core raw-SQL API. If any part of it comes from
+      user input this is SQL injection (CWE-89). Use LINQ, or FromSql/SqlQuery with an
+      interpolated string so EF Core turns the values into parameters.
+    metadata:
+      category: security
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      owasp: "A05:2025 - Injection"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: $DB.SqlQueryRaw<$T>($SQL, ...)
+          - pattern: $DB.FromSqlRaw($SQL, ...)
+          - pattern: $DB.ExecuteSqlRaw($SQL, ...)
+          - pattern: $DB.ExecuteSqlRawAsync($SQL, ...)
+      - pattern-not: $DB.SqlQueryRaw<$T>("...", ...)
+      - pattern-not: $DB.FromSqlRaw("...", ...)
+      - pattern-not: $DB.ExecuteSqlRaw("...", ...)
+      - pattern-not: $DB.ExecuteSqlRawAsync("...", ...)
