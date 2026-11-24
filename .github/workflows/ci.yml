@@ -263,19 +263,20 @@ jobs:
           for i in $(seq 1 30); do curl -fsS "$BASE_URL/healthz" >/dev/null && break; sleep 1; done
           curl -fsS -o /dev/null "$BASE_URL/api/v1/products"
       - name: Seed test data (random credentials, disposable)
+        id: seed
         run: tests/dast/seed.sh
       - name: Business-logic checks (F2 order ownership, F3 server-side price)
         id: logic
         run: tests/dast/business-logic.sh
       - name: ZAP authenticated API scan (fails on High)
         id: zap
-        if: always() && steps.deploy.outcome == 'success'
+        if: always() && steps.seed.outcome == 'success'
         run: tests/dast/zap-scan.sh
       - name: Summary
         if: always()
         run: |
           for f in business-logic.md zap-summary.md; do
-            [ -f "$OUT_DIR/$f" ] && cat "$OUT_DIR/$f" >> "$GITHUB_STEP_SUMMARY"
+            if [ -f "$OUT_DIR/$f" ]; then cat "$OUT_DIR/$f" >> "$GITHUB_STEP_SUMMARY"; fi
           done
       - uses: actions/upload-artifact@v7
         if: always()

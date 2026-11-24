@@ -33,8 +33,10 @@ register "$ALICE_EMAIL" "$ALICE_PW" Alice
 register "$BOB_EMAIL"   "$BOB_PW"   Bob
 
 echo "==> Verifying emails and promoting the admin (test database only)"
+# Same effect as clicking the verification link: email verified AND account status pending -> active.
 kubectl -n amcart-databases exec deploy/postgres -- psql -q -v ON_ERROR_STOP=1 -U postgres -d amcart_users -c \
-  "UPDATE users SET is_email_verified = true WHERE email IN ('$ADMIN_EMAIL','$ALICE_EMAIL','$BOB_EMAIL');
+  "UPDATE users SET is_email_verified = true, status = 'active'
+     WHERE email IN ('$ADMIN_EMAIL','$ALICE_EMAIL','$BOB_EMAIL');
    UPDATE users SET role = 'admin' WHERE email = '$ADMIN_EMAIL';"
 
 ADMIN_TOKEN="$(login "$ADMIN_EMAIL" "$ADMIN_PW")"; mask "$ADMIN_TOKEN"
