@@ -41,6 +41,9 @@ spec:
     spec:
       serviceAccountName: user-service
       automountServiceAccountToken: false
+      dnsConfig:
+        options:
+          - { name: ndots, value: "2" }   # see deploy/README.md "DNS": FQDNs resolved directly
       securityContext:
         runAsNonRoot: true
         runAsUser: 1654        # "app" user of the .NET images
@@ -73,13 +76,16 @@ spec:
           startupProbe:          # EF Core migrations run at startup
             httpGet: { path: /health, port: http }
             periodSeconds: 5
+            timeoutSeconds: 3    # /health includes a database round trip
             failureThreshold: 36
           readinessProbe:
             httpGet: { path: /health, port: http }
             periodSeconds: 10
+            timeoutSeconds: 3
           livenessProbe:         # TCP only: a database outage must not restart the app
             tcpSocket: { port: http }
             periodSeconds: 20
+            timeoutSeconds: 3
       volumes:
         - name: tmp
           emptyDir:
