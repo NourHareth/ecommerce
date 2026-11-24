@@ -15,6 +15,9 @@ RUN npm run build
 # Files are copied as root:root, read-only for nginx: a compromised worker cannot
 # rewrite the site or its own configuration. Runtime writes go to /tmp only.
 FROM nginxinc/nginx-unprivileged:1.31-alpine
+# Published base images lag behind Alpine security fixes: apply them at build time.
+USER root
+RUN apk upgrade --no-cache
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx/nginx-main.conf /etc/nginx/nginx.conf
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
