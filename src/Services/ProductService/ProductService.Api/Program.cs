@@ -83,6 +83,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+else if (app.Configuration.GetValue<bool>("Swagger:ExposeSpec"))
+{
+    // DAST environment only: publish the OpenAPI document (no UI) so the scanner knows every
+    // endpoint and parameter. Off by default: production does not advertise its API surface.
+    app.UseSwagger();
+}
 
 app.UseHttpsRedirection();
 // app.UseCors();
