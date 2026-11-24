@@ -9,6 +9,7 @@ namespace AmCart.ProductService.Api.Controllers;
 [Route("api/v1/products/quick-search")]
 public class ProductSearchController : ControllerBase
 {
+    private const int MaxQueryLength = 100;   // an autocomplete term; bounds the work per request
     private readonly IProductRepository _products;
 
     public ProductSearchController(IProductRepository products)
@@ -24,6 +25,8 @@ public class ProductSearchController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(q))
             return BadRequest(new { success = false, error = new { code = "VALIDATION", message = "Query parameter q is required." } });
+        if (q.Length > MaxQueryLength)
+            return BadRequest(new { success = false, error = new { code = "VALIDATION", message = $"Query parameter q must be at most {MaxQueryLength} characters." } });
 
         var hits = await _products.QuickSearchAsync(q.Trim(), ct);
         return Ok(new { success = true, data = hits });
