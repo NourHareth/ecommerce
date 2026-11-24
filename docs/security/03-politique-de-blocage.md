@@ -17,6 +17,23 @@ Les fichiers de règles sont versionnés dans le dépôt : toute modification pa
 Le job `security-gate` ne réussit que si les cinq contrôles et les builds réussissent. Le déploiement et
 les tests dynamiques dépendent de ce job : rien ne se déploie tant qu'un contrôle est rouge.
 
+**Ce qui empêche de contourner la CI.** Un contrôle qui échoue ne bloque rien si l'on peut pousser
+directement sur `main`. Le ruleset GitHub `protect-main` (`.github/rulesets/protect-main.json`) impose
+donc une PR pour toute modification de `main`, interdit le force-push et la suppression, et n'accorde
+**aucune dérogation**, y compris aux administrateurs. Les contrôles requis pour fusionner sont introduits
+en deux temps :
+
+| Phase | Contrôles requis | Raison |
+|-------|------------------|--------|
+| Base vulnérable (actuelle) | builds .NET et React, *Dependencies*, *IaC*, *Image ui* | contrôles déjà verts : toute régression est bloquée, et le travail sur les autres sujets reste possible |
+| Après correction de F1, F2, F3, F5 | tous les contrôles + `Security gate` | aucune fusion sans pipeline entièrement vert |
+
+Pendant la phase actuelle, *SAST*, *Secrets* et *Image user/product* restent rouges **à dessein**, à
+cause des failles F1 et F5 non encore corrigées. Ils ne sont pas requis, sinon aucune PR ne pourrait
+être fusionnée, mais leurs résultats restent visibles sur chaque PR. Désactiver le ruleset (par exemple
+pour le force-push qu'impose la purge de l'historique, §4.4) est une opération exceptionnelle : elle est
+consignée dans le registre des exceptions, avec sa durée.
+
 En complément, CodeQL (`.github/workflows/codeql.yml`) tourne en **mode consultatif** : ses alertes
 sont triées chaque semaine dans l'onglet Security de GitHub, mais il ne bloque pas. La justification
 figure en §2.
