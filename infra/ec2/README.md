@@ -89,6 +89,10 @@ Copy this folder from the repo (or clone the repo and symlink):
 ```bash
 # From your laptop (example)
 scp -r infra/ec2/* ec2-user@YOUR_EC2_IP:/opt/amcart/
+
+# Transfer the PostgreSQL initialization script (required on first DB initialization)
+ssh ec2-user@YOUR_EC2_IP 'mkdir -p /opt/amcart/postgres-init'
+scp src/Databases/postgres/init/init-multiple-dbs.sh ec2-user@YOUR_EC2_IP:/opt/amcart/postgres-init/
 ```
 
 Create **`.env`** from [`.env.example`](.env.example) and set real values (`POSTGRES_PASSWORD`, `JWT_SECRET`, `ECR_REGISTRY`, image URIs).
@@ -103,8 +107,7 @@ docker compose --env-file .env pull
 docker compose --env-file .env up -d
 ```
 
-**Smoke test:** open `http://YOUR_EC2_IP/` — register, sign in, open profile.
-
+**Smoke test:** verify the HTTPS endpoint with `curl -k https://YOUR_EC2_IP/`. The current self-signed certificate is for localhost only, so browsers will show a certificate warning. Do not enter real credentials through this temporary endpoint. Before production use, configure a trusted TLS certificate for a DNS hostname.
 **Logs:** `docker compose -f /opt/amcart/docker-compose.yml logs -f`
 
 ## 3. Stop / Start to save costs (recommended over terminate)
