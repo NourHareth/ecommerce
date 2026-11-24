@@ -42,15 +42,15 @@ Nommage des branches : `fix/Fx-...` (correction d'une faille du registre), `feat
 | Environnement | Usage | Commande |
 |---------------|-------|----------|
 | CI d'une PR | builds, tests unitaires, 5 contrôles de sécurité | automatique |
-| VM : minikube `amcart` | environnement dédié de test et de démonstration | `git switch <branche>` puis `deploy/scripts/deploy-minikube.sh` |
-| Cluster éphémère (kind) dans la CI | DAST après déploiement (§4.6) | à venir |
+| VM : minikube `amcart` | environnement dédié de test et de démonstration | `git switch <branche>` puis `deploy/scripts/deploy.sh` |
+| Cluster éphémère (kind) dans la CI | DAST après déploiement (§4.6) | automatique : job `Security · DAST` (rapports dans l'artefact `dast-reports`) |
 
 ## Où ranger les tests et les preuves
 
 - **Tests** : dans le dépôt, rejoués par la CI à chaque PR.
   - tests unitaires : `src/Services/*/*.UnitTests/` (tests de non-régression des failles corrigées) ;
   - vérifications du déploiement : `deploy/scripts/verify-hardening.sh` ;
-  - tests dynamiques : `tests/dast/` (à venir).
+  - tests dynamiques : `tests/dast/` (données de test, contrôles de logique métier F2/F3, scan ZAP authentifié).
 - **Preuves** (rapport et soutenance) : `docs/evidence/`. Voir `docs/evidence/README.md`.
 
 ## Démonstration « le pipeline bloque »

@@ -16,7 +16,7 @@ deploy/
 ├── k8s/policies/
 │   └── kyverno-pod-hardening.yaml  contrôle d'admission (Kyverno v1.20)
 └── scripts/
-    ├── deploy-minikube.sh        build, secrets d'exécution, déploiement
+    ├── deploy.sh        build, secrets d'exécution, déploiement
     ├── install-kyverno.sh        Kyverno (version épinglée, empreinte SHA-256 vérifiée) + politique
     └── verify-hardening.sh       preuves : rejets d'admission, segmentation, application joignable
 ```
@@ -27,7 +27,7 @@ deploy/
 minikube start -p amcart --driver=docker --container-runtime=containerd \
   --kubernetes-version=v1.37.0 --cni=calico --cpus=4 --memory=5g
 git clone https://github.com/NourHareth/ecommerce.git ~/amcart && cd ~/amcart
-deploy/scripts/deploy-minikube.sh
+deploy/scripts/deploy.sh
 deploy/scripts/install-kyverno.sh
 deploy/scripts/verify-hardening.sh
 kubectl -n amcart-web port-forward --address 0.0.0.0 svc/ui 8080:8080   # http://<IP-VM>:8080
@@ -53,7 +53,7 @@ pas lire `amcart_users`, qui contient les empreintes de mots de passe.
 
 ## 2. Secrets
 
-Aucun secret n'est dans les manifestes. `deploy-minikube.sh` génère les mots de passe et la clé JWT avec
+Aucun secret n'est dans les manifestes. `deploy.sh` génère les mots de passe et la clé JWT avec
 `openssl rand` dans `~/.config/amcart/secrets.env` (mode 600, hors du dépôt), puis crée les Secrets
 Kubernetes. Les valeurs ne sont jamais affichées. Les variables d'environnement injectées
 (`ConnectionStrings__DefaultConnection`, `Jwt__Secret`) **remplacent** les valeurs encore présentes

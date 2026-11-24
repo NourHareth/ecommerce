@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Evidence for section 4.5 (run on the VM after deploy-minikube.sh and install-kyverno.sh):
+# Evidence for section 4.5 (run on the VM after deploy.sh and install-kyverno.sh):
 #   A. a non-hardened workload is REJECTED at admission (PSA and Kyverno);
 #   B. network segmentation blocks forbidden flows and allows the needed ones;
 #   C. the application is still reachable end to end after segmentation.

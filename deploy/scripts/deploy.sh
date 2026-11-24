@@ -1,38 +1,57 @@
 #!/usr/bin/env bash
-# Builds the images on this machine, loads them into the minikube "amcart" cluster,
-# creates the runtime secrets and applies the manifests.
-# Usage (repository root, on the VM): deploy/scripts/deploy-minikube.sh
+# Builds the images, loads them into the cluster, creates the runtime secrets and applies the manifests.
+#
+#   deploy/scripts/deploy.sh                          # VM: minikube profile "amcart", base manifests
+#   CLUSTER=kind OVERLAY=dast deploy/scripts/deploy.sh  # CI: disposable kind cluster for DAST
 #
 # Secrets (section 4.4): generated once with a CSPRNG into $SECRETS_FILE (mode 600, outside the
 # repository), then pushed to the cluster as Kubernetes Secrets. They never appear in Git, in
 # an image, or in this script's output.
 set -euo pipefail
 
-PROFILE="${PROFILE:-amcart}"
+CLUSTER="${CLUSTER:-minikube}"           # minikube | kind
+PROFILE="${PROFILE:-amcart}"             # minikube profile / kind cluster name
+OVERLAY="${OVERLAY:-base}"               # base | dast
 SECRETS_FILE="${SECRETS_FILE:-$HOME/.config/amcart/secrets.env}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
+case "$CLUSTER" in
+  minikube) CONTEXT="$PROFILE" ;;
+  kind)     CONTEXT="kind-$PROFILE" ;;
+  *) echo "CLUSTER must be minikube or kind" >&2; exit 2 ;;
+esac
+case "$OVERLAY" in
+  base) RESOURCE="../../base" ;;
+  dast) RESOURCE="../dast" ;;
+  *) echo "OVERLAY must be base or dast" >&2; exit 2 ;;
+esac
+
 TAG="$(git rev-parse --short=12 HEAD)"
 git diff --quiet HEAD -- src || TAG="$TAG-dirty"
-
-kubectl config use-context "$PROFILE" >/dev/null
+kubectl config use-context "$CONTEXT" >/dev/null
 
 echo "==> Building images (tag $TAG)"
 docker build -q -t "amcart/user-service:$TAG"    -f src/Services/UserService/Dockerfile src
 docker build -q -t "amcart/product-service:$TAG" -f src/Services/ProductService/Dockerfile src
 docker build -q -t "amcart/ui:$TAG"              src/Frontends/ui-app
 
-echo "==> Loading images into minikube profile $PROFILE"
-for img in "amcart/user-service:$TAG" "amcart/product-service:$TAG" "amcart/ui:$TAG" postgres:16-alpine; do
-  if minikube -p "$PROFILE" image ls | grep -q "${img}$"; then
-    echo "    $img already loaded"
+echo "==> Loading images into $CLUSTER ($PROFILE)"
+for img in "amcart/user-service:$TAG" "amcart/product-service:$TAG" "amcart/ui:$TAG"; do
+  if [ "$CLUSTER" = kind ]; then
+    kind load docker-image "$img" --name "$PROFILE" >/dev/null
+  elif minikube -p "$PROFILE" image ls | grep -q "${img}$"; then
+    echo "    $img already loaded"; continue
   else
-    docker image inspect "$img" >/dev/null 2>&1 || docker pull -q "$img"
     minikube -p "$PROFILE" image load "$img"
-    echo "    $img loaded"
   fi
+  echo "    $img loaded"
 done
+# minikube on the VM: reuse the local postgres image (slow network); kind pulls it itself.
+if [ "$CLUSTER" = minikube ] && ! minikube -p "$PROFILE" image ls | grep -q 'postgres:16-alpine$'; then
+  docker image inspect postgres:16-alpine >/dev/null 2>&1 || docker pull -q postgres:16-alpine
+  minikube -p "$PROFILE" image load postgres:16-alpine
+fi
 
 echo "==> Runtime secrets"
 if [ ! -f "$SECRETS_FILE" ]; then
@@ -70,20 +89,20 @@ apply_secret amcart-services product-service-secret \
   "ConnectionStrings__DefaultConnection=Host=$PG_HOST;Port=5432;Database=amcart_products;Username=products_app;Password=$PRODUCTS_DB_PASSWORD" \
   "Jwt__Secret=$JWT_SECRET"
 
-echo "==> Applying manifests"
-OVERLAY="$ROOT/deploy/k8s/overlays/.generated"   # git-ignored
-mkdir -p "$OVERLAY"
-cat > "$OVERLAY/kustomization.yaml" <<EOF
+echo "==> Applying manifests ($OVERLAY)"
+GEN="$ROOT/deploy/k8s/overlays/.generated"   # git-ignored, only pins the image tag
+mkdir -p "$GEN"
+cat > "$GEN/kustomization.yaml" <<EOF
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - ../../base
+  - $RESOURCE
 images:
   - { name: amcart/user-service,    newTag: "$TAG" }
   - { name: amcart/product-service, newTag: "$TAG" }
   - { name: amcart/ui,              newTag: "$TAG" }
 EOF
-kubectl apply -k "$OVERLAY"
+kubectl apply -k "$GEN"
 
 echo "==> Waiting for rollouts"
 kubectl -n amcart-databases rollout status deploy/postgres        --timeout=300s
@@ -91,9 +110,6 @@ kubectl -n amcart-services  rollout status deploy/user-service    --timeout=300s
 kubectl -n amcart-services  rollout status deploy/product-service --timeout=300s
 kubectl -n amcart-web       rollout status deploy/ui              --timeout=300s
 
-cat <<EOF
-
-Deployed $TAG. To reach the shop from another machine on the LAN:
-  kubectl -n amcart-web port-forward --address 0.0.0.0 svc/ui 8080:8080
-  then open http://<VM-IP>:8080
-EOF
+echo
+echo "Deployed $TAG ($OVERLAY) on $CLUSTER/$PROFILE."
+echo "Reach the shop:  kubectl -n amcart-web port-forward --address 0.0.0.0 svc/ui 8080:8080"

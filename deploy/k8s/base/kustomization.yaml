@@ -11,4 +11,4 @@ resources:
   - product-service.yaml
   - ui.yaml
   - network-policies.yaml
-# Image tags are set per environment by deploy/scripts/deploy-minikube.sh (git commit SHA, never :latest).
+# Image tags are set per environment by deploy/scripts/deploy.sh (git commit SHA, never :latest).

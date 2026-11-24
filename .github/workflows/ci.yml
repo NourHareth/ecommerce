@@ -227,10 +227,72 @@ jobs:
           test "$(docker exec ui id -u)" != "0"
           echo UI_RUNTIME_HARDENING_OK
 
+  # ------------------------------------------------------------------ dynamic testing
+  # Deploys the build into a DISPOSABLE kind cluster on the runner (same hardened manifests as the
+  # VM, DAST overlay), then runs authenticated tests against the live app. It needs only the builds:
+  # testing a vulnerable build in a throwaway environment is the point. Promotion is decided by
+  # security-gate, which needs DAST AND the static controls.
+  dast:
+    name: "Security · DAST (ZAP + business logic)"
+    needs: [dotnet, ui]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OUT_DIR: ${{ github.workspace }}/dast-out
+      BASE_URL: http://127.0.0.1:8080
+      ZAP_IMAGE: zaproxy/zap-stable:2.17.0
+    steps:
+      - uses: actions/checkout@v7
+      - name: Create disposable kind cluster (Kubernetes v1.37.0)
+        uses: helm/kind-action@v1.15.2
+        with:
+          version: v0.33.0
+          node_image: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
+          cluster_name: amcart
+      - name: Deploy (hardened manifests + DAST overlay, fresh secrets)
+        id: deploy
+        env:
+          CLUSTER: kind
+          PROFILE: amcart
+          OVERLAY: dast
+          SECRETS_FILE: ${{ runner.temp }}/amcart-secrets.env
+        run: deploy/scripts/deploy.sh
+      - name: Expose the gateway on the runner
+        run: |
+          kubectl -n amcart-web port-forward svc/ui 8080:8080 > "$RUNNER_TEMP/pf.log" 2>&1 &
+          for i in $(seq 1 30); do curl -fsS "$BASE_URL/healthz" >/dev/null && break; sleep 1; done
+          curl -fsS -o /dev/null "$BASE_URL/api/v1/products"
+      - name: Seed test data (random credentials, disposable)
+        id: seed
+        run: tests/dast/seed.sh
+      - name: Business-logic checks (F2 order ownership, F3 server-side price)
+        id: logic
+        run: tests/dast/business-logic.sh
+      - name: ZAP authenticated API scan (fails on High)
+        id: zap
+        if: always() && steps.seed.outcome == 'success'
+        run: tests/dast/zap-scan.sh
+      - name: Summary
+        if: always()
+        run: |
+          for f in business-logic.md zap-summary.md; do
+            if [ -f "$OUT_DIR/$f" ]; then cat "$OUT_DIR/$f" >> "$GITHUB_STEP_SUMMARY"; fi
+          done
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dast-reports
+          path: |
+            dast-out/*.md
+            dast-out/*.html
+            dast-out/*.json
+            !dast-out/seed.env
+          retention-days: 30
+
   # ------------------------------------------------------------------ gate
   security-gate:
     name: Security gate
-    needs: [dotnet, ui, sast, sca, secrets, iac, images]
+    needs: [dotnet, ui, sast, sca, secrets, iac, images, dast]
     runs-on: ubuntu-latest
     steps:
       - run: echo "All blocking security controls passed for ${{ github.sha }}."

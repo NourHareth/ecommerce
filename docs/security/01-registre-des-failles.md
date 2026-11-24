@@ -135,9 +135,9 @@ Exécution de référence du pipeline bloquant, sur la base vulnérable :
 
 | ID | Documentée | Démontrée | Preuve | Corrigée | Vérifiée après correction |
 |----|-----------|-----------|--------|----------|---------------------------|
-| F1 | ✅ | ✅ statique, ⬜ dynamique | job *SAST* : règle `efcore-raw-sql-non-constant`, `ProductRepository.cs` | ⬜ | ⬜ |
-| F2 | ✅ | ⬜ | invisible en statique : attend le DAST | ⬜ | ⬜ |
-| F3 | ✅ | ⬜ | invisible en statique : attend le DAST | ⬜ | ⬜ |
+| F1 | ✅ | ✅ statique + ✅ dynamique | job *SAST* : règle `efcore-raw-sql-non-constant`, `ProductRepository.cs` · job *DAST* ([CI #45502066755](https://github.com/NourHareth/ecommerce/actions/runs/45502066755)) : ZAP, injection SQL par erreur, `GET /api/v1/products/quick-search [q]`, une apostrophe → HTTP 500 | ⬜ | ⬜ |
+| F2 | ✅ | ✅ dynamique | job *DAST* ([CI #45502066755](https://github.com/NourHareth/ecommerce/actions/runs/45502066755)) : bob lit la commande d'alice → **200** (attendu 404) ; témoin : alice lit sa commande → 200 | ⬜ | ⬜ |
+| F3 | ✅ | ✅ dynamique | job *DAST* ([CI #45502066755](https://github.com/NourHareth/ecommerce/actions/runs/45502066755)) : `unitPrice` 0.01 envoyé par le client → panier facturé **0.01** (prix catalogue 49.99) | ⬜ | ⬜ |
 | F4 | ✅ | ✅ | job *Dependencies* : CVE-2023-46233, CRITICAL | ✅ `9a646c2` : dépendance retirée (inutilisée) | ✅ job *Dependencies* vert ([CI #45492295507](https://github.com/NourHareth/ecommerce/actions/runs/45492295507)) |
 | F5 | ✅ | ✅ | job *Secrets* (historique complet, caviardé) + jobs *Image user/product* : secrets dans `/app/appsettings.json` | ⬜ | ⬜ |
 | F6 | ✅ | ✅ | job *IaC* : DS-0002 sur le Dockerfile UI + job *Image ui* : « runs as root » | ✅ image : `f405e97` (nginx-unprivileged, `USER 101`, port 8080, écritures limitées à `/tmp`) · ⬜ Kubernetes : `securityContext` + Kyverno | ✅ image ([CI #45493010532](https://github.com/NourHareth/ecommerce/actions/runs/45493010532)) : job *Image ui* vert, conteneur démarré en lecture seule, sans capacité, UID ≠ 0, sert la SPA avec l'en-tête CSP. Dockerfile UI : 0 mauvaise configuration · ⬜ admission |

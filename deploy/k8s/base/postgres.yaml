@@ -1,4 +1,4 @@
-# PostgreSQL 16. The `postgres-credentials` Secret is NOT in Git: deploy/scripts/deploy-minikube.sh
+# PostgreSQL 16. The `postgres-credentials` Secret is NOT in Git: deploy/scripts/deploy.sh
 # generates it at deploy time (section 4.4: secrets supplied at runtime).
 apiVersion: v1
 kind: ServiceAccount

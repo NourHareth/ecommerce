@@ -14,8 +14,43 @@ Les fichiers de règles sont versionnés dans le dépôt : toute modification pa
 | Secrets | Gitleaks v8.30.1 + `.gitleaks.toml` | **Tout l'historique Git** | **au moins un secret** (valeurs caviardées avec `--redact`) | SARIF |
 | IaC | Trivy v0.76.2 `config` | Dockerfiles, manifestes Kubernetes | une mauvaise configuration **HIGH ou CRITICAL** | Table |
 
-Le job `security-gate` ne réussit que si les cinq contrôles et les builds réussissent. Le déploiement et
-les tests dynamiques dépendent de ce job : rien ne se déploie tant qu'un contrôle est rouge.
+**Test dynamique (§4.6), après déploiement.** Le job *DAST* déploie le build dans un cluster kind
+**jetable**, créé sur le runner et détruit à la fin du job. Il utilise les mêmes manifestes durcis que
+la VM, plus l'overlay `deploy/k8s/overlays/dast`. Il exécute ensuite deux types de tests contre
+l'application en marche :
+
+| Test | Outil | Casse le build si… |
+|------|-------|--------------------|
+| Scan authentifié des deux API, via la passerelle nginx | OWASP ZAP 2.17.0 (`zap-api-scan`, jeton d'un client de test) | une alerte de risque **High** avec **preuve** (erreur de base de données, délai, charge confirmée). Les injections SQL seulement **déduites** par comparaison de pages, sans aucune preuve, sont listées pour tri mais ne bloquent pas (EXC-002) |
+| Contrôles de logique métier : propriété des commandes (F2), prix calculé côté serveur (F3) | `tests/dast/business-logic.sh` | un contrôle échoue |
+
+*Pourquoi deux types de tests ?* Un scanner générique ne sait pas que la commande d'Alice ne doit pas être
+lisible par Bob, ni quel est le « bon » prix. Ces failles de logique (F2, F3) demandent des tests qui
+connaissent les règles métier. *Pourquoi seulement High pour ZAP ?* Pour la même raison que pour le
+SCA : les alertes Medium et Low d'un scan d'API (en-têtes, informations) sont nombreuses et souvent
+sans impact. Elles restent dans le rapport et sont revues.
+
+*Pourquoi ne pas bloquer sur toute alerte High de ZAP ?* Le premier scan a produit 115 alertes
+« SQL Injection » :
+
+- **1 seule** reposait sur une preuve : sur `quick-search [q]`, une simple apostrophe provoque une
+  erreur 500 de PostgreSQL (F1) ;
+- les **114 autres** sont de pures déductions. ZAP compare les réponses obtenues avec `AND 1=1` et
+  `AND 1=2`, ou avec `22-2` et `20`, sur des endpoints qui n'utilisent que LINQ (requêtes paramétrées
+  par EF Core). Ces réponses varient d'une requête à l'autre (horodatages, identifiants générés,
+  erreurs de validation), ce qui trompe la comparaison.
+
+Bloquer sur ces 114 alertes rendrait le contrôle rouge en permanence, donc inutile. La limite est
+assumée : une injection SQL « aveugle » réelle pourrait passer ce filtre. Elle est couverte par la
+règle SAST `efcore-raw-sql-non-constant` (toute requête SQL brute non constante bloque) et par la revue
+de code.
+
+*Pourquoi le DAST ne dépend-il pas des contrôles statiques ?* L'environnement est jetable et isolé : y
+déployer un build vulnérable pour le tester ne présente pas de risque, c'est même son rôle. La décision
+de **promotion** appartient au job `security-gate`, qui exige les contrôles statiques **et** le DAST.
+
+Le job `security-gate` ne réussit que si les cinq contrôles statiques, le DAST et les builds réussissent.
+Rien n'est promu tant qu'un contrôle est rouge.
 
 **Ce qui empêche de contourner la CI.** Un contrôle qui échoue ne bloque rien si l'on peut pousser
 directement sur `main`. Le ruleset GitHub `protect-main` (`.github/rulesets/protect-main.json`) impose
