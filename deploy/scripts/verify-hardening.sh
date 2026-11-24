@@ -79,15 +79,38 @@ else ko "hardened pod was refused"; fi
 
 echo
 echo "== B. Network segmentation ==============================================="
+# The tests below run from inside the pods: they are only meaningful if every pod is Ready.
+if kubectl wait --for=condition=Available --timeout=180s \
+     -n amcart-web deploy/ui >/dev/null 2>&1 \
+   && kubectl wait --for=condition=Available --timeout=180s \
+     -n amcart-services deploy/user-service deploy/product-service >/dev/null 2>&1 \
+   && kubectl wait --for=condition=Available --timeout=180s \
+     -n amcart-databases deploy/postgres >/dev/null 2>&1; then
+  ok "all deployments Available"
+else
+  ko "deployments not Available: network results below would be meaningless"
+  for ns in amcart-web amcart-services amcart-databases; do kubectl -n "$ns" get pods --no-headers; done | sed 's/^/        /'
+  echo; echo "Result: $pass passed, $fail failed (stopped: application not ready)"; exit 1
+fi
 UI="$(kubectl -n amcart-web get pod -l app=ui -o jsonpath='{.items[0].metadata.name}')"
 PG="$(kubectl -n amcart-databases get pod -l app=postgres -o jsonpath='{.items[0].metadata.name}')"
 SVC=amcart-services.svc.cluster.local
 DB=postgres.amcart-databases.svc.cluster.local
 
-# can <ns> <pod> <host> <port>: TCP connect with a 3 s timeout (busybox nc in both images)
-can() { kubectl -n "$1" exec "$2" -- nc -z -w 3 "$3" "$4" >/dev/null 2>&1; }
-allowed() { if can "$@"; then ok "$2 -> $3:$4 allowed (needed)"; else ko "$2 -> $3:$4 blocked but needed"; fi; }
-denied()  { if can "$@"; then ko "$2 -> $3:$4 OPEN but should be blocked"; else ok "$2 -> $3:$4 blocked"; fi; }
+# probe <ns> <pod> <host> <port> -> prints open | closed | error
+# TCP connect with a 3 s timeout (busybox nc in both images). "error" means kubectl exec itself
+# failed (pod not running...), which must never be read as "blocked".
+probe() {
+  local out
+  out="$(kubectl -n "$1" exec "$2" -- sh -c "nc -z -w 3 '$3' '$4'; echo rc=\$?" 2>/dev/null)"
+  case "$out" in *rc=0*) echo open ;; *rc=*) echo closed ;; *) echo error ;; esac
+}
+allowed() { case "$(probe "$@")" in open) ok "$2 -> $3:$4 allowed (needed)" ;;
+                                    closed) ko "$2 -> $3:$4 blocked but needed" ;;
+                                    *) ko "$2 -> $3:$4 could not be tested (exec failed)" ;; esac; }
+denied()  { case "$(probe "$@")" in closed) ok "$2 -> $3:$4 blocked" ;;
+                                    open) ko "$2 -> $3:$4 OPEN but should be blocked" ;;
+                                    *) ko "$2 -> $3:$4 could not be tested (exec failed)" ;; esac; }
 
 allowed amcart-web       "$UI" "user-service.$SVC"    8080
 allowed amcart-web       "$UI" "product-service.$SVC" 8080
