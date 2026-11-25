@@ -27,7 +27,7 @@ Copy the example and adjust if needed:
 cp .env.example .env
 ```
 
-Default values in `.env.example` match the connection strings used by UserService and ProductService (`amcart` / `amcart_password`, databases `amcart_users` and `amcart_products`).
+`.env.example` contains no real password: set `POSTGRES_PASSWORD` in your local `.env` and pass the same value to the services through `ConnectionStrings__DefaultConnection` (databases `amcart_users` and `amcart_products`).
 
 ### 3. Start PostgreSQL with persistent storage
 
@@ -51,8 +51,8 @@ You should see `amcart_users` and `amcart_products` in the list.
 
 From the **host** (e.g. services running on your machine):
 
-- UserService: `Host=localhost;Port=5432;Database=amcart_users;Username=amcart;Password=amcart_password`
-- ProductService: `Host=localhost;Port=5432;Database=amcart_products;Username=amcart;Password=amcart_password`
+- UserService: `Host=localhost;Port=5432;Database=amcart_users;Username=amcart;Password=<POSTGRES_PASSWORD>`
+- ProductService: `Host=localhost;Port=5432;Database=amcart_products;Username=amcart;Password=<POSTGRES_PASSWORD>`
 
 From **another container** on the same Docker network, use hostname `postgres` and port `5432`. From a container not on the same Compose stack, use `Host=host.docker.internal;Port=5432;...` (Docker Desktop).
 
@@ -105,7 +105,7 @@ Use the service DNS name:
 
 - **Host:** `postgres.amcart-databases.svc.cluster.local`
 - **Port:** `5432`
-- **Connection string:** `Host=postgres.amcart-databases.svc.cluster.local;Port=5432;Database=amcart_users;Username=amcart;Password=amcart_password`
+- **Connection string:** `Host=postgres.amcart-databases.svc.cluster.local;Port=5432;Database=amcart_users;Username=amcart;Password=<POSTGRES_PASSWORD>`
 
 ### 5. Port-forward to access from host (optional)
 

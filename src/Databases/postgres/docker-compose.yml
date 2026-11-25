@@ -9,7 +9,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-amcart}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-amcart_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}
       POSTGRES_DB: ${POSTGRES_DB:-amcart_users}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"

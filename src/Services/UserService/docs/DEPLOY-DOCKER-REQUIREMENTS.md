@@ -26,7 +26,7 @@ Start a Postgres container and create the database:
 ```bash
 docker run -d --name amcart-postgres \
   -e POSTGRES_USER=amcart \
-  -e POSTGRES_PASSWORD=amcart_password \
+  -e POSTGRES_PASSWORD=<POSTGRES_PASSWORD> \
   -e POSTGRES_DB=amcart_users \
   -p 5432:5432 \
   postgres:16-alpine
@@ -39,7 +39,7 @@ Then apply migrations (see **Migrations** below).
 Ensure it has:
 
 - A database (e.g. `amcart_users`).
-- User/password the app will use (e.g. `amcart` / `amcart_password`).
+- User/password the app will use (e.g. `amcart` / `<POSTGRES_PASSWORD>`).
 - Host/port reachable from the UserService container (use host DNS: `host.docker.internal` on Docker Desktop instead of `localhost`).
 
 ---
@@ -61,7 +61,7 @@ When running the container, override config so it can reach the DB and listen on
 
 **Connection string when DB is in Docker on same host:**
 
-- From **host**: `Host=localhost;Port=5432;Database=amcart_users;Username=amcart;Password=amcart_password`
+- From **host**: `Host=localhost;Port=5432;Database=amcart_users;Username=amcart;Password=<POSTGRES_PASSWORD>`
 - From **another container** (e.g. UserService container): use `Host=host.docker.internal;Port=5432;...` (Docker Desktop) or the Postgres container name if you use a shared network.
 
 ---
@@ -84,7 +84,7 @@ The app does not apply migrations automatically on startup. Before first run:
 1. **Start PostgreSQL** (if using Docker):
    ```bash
    docker run -d --name amcart-postgres \
-     -e POSTGRES_USER=amcart -e POSTGRES_PASSWORD=amcart_password \
+     -e POSTGRES_USER=amcart -e POSTGRES_PASSWORD=<POSTGRES_PASSWORD> \
      -e POSTGRES_DB=amcart_users -p 5432:5432 postgres:16-alpine
    ```
 
@@ -100,8 +100,8 @@ The app does not apply migrations automatically on startup. Before first run:
    ```bash
    docker run -d --name user-service -p 8080:8080 \
      -e ASPNETCORE_URLS=http://+:8080 \
-     -e ConnectionStrings__DefaultConnection="Host=host.docker.internal;Port=5432;Database=amcart_users;Username=amcart;Password=amcart_password" \
-     -e Jwt__Secret="amcart-user-service-secret-key-minimum-32-characters-long-for-hs256" \
+     -e ConnectionStrings__DefaultConnection="Host=host.docker.internal;Port=5432;Database=amcart_users;Username=amcart;Password=<POSTGRES_PASSWORD>" \
+     -e Jwt__Secret="<JWT_SECRET>" \
      -e Jwt__Issuer=amcart \
      -e Jwt__Audience=amcart-api \
      user-service
