@@ -49,12 +49,15 @@ public class ProductRepository : IProductRepository
 
     public async Task<IReadOnlyList<ProductSearchHitDto>> QuickSearchAsync(string term, CancellationToken ct = default)
     {
-        var sql = "SELECT id AS \"Id\", name AS \"Name\", slug AS \"Slug\", price AS \"Price\" " +
-                  "FROM products WHERE status = 'active' AND deleted_at IS NULL " +
-                  "AND name ILIKE '%" + term + "%' ORDER BY name LIMIT 20";
-
-        return await _db.Database
-            .SqlQueryRaw<ProductSearchHitDto>(sql)
+        // LINQ (F1): EF Core sends the term as a query parameter, never as SQL text.
+        // Soft-deleted products are excluded by the global query filter.
+        var needle = term.Trim().ToLower();
+        return await _db.Products
+            .AsNoTracking()
+            .Where(p => p.Status == "active" && p.Name.ToLower().Contains(needle))
+            .OrderBy(p => p.Name)
+            .Take(20)
+            .Select(p => new ProductSearchHitDto { Id = p.Id, Name = p.Name, Slug = p.Slug, Price = p.Price })
             .ToListAsync(ct);
     }
 

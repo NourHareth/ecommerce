@@ -6,7 +6,7 @@ public interface ICartService
 {
     Task<CartDto> GetCartAsync(Guid? userId, string? sessionId, CancellationToken ct = default);
 
-    Task<CartDto> AddItemAsync(Guid? userId, string? sessionId, Guid productId, int quantity, decimal? displayedUnitPrice = null, CancellationToken ct = default);
+    Task<CartDto> AddItemAsync(Guid? userId, string? sessionId, Guid productId, int quantity, CancellationToken ct = default);
 
     Task<CartDto> UpdateItemAsync(Guid? userId, string? sessionId, Guid productId, int quantity, CancellationToken ct = default);
 

@@ -1,0 +1,33 @@
+# 2026-11-25 · Tests de non-régression F1, F2, F3 (ProductService.UnitTests)
+# Environnement : VM, conteneur mcr.microsoft.com/dotnet/sdk:8.0
+# Commande : dotnet test src/Services/ProductService/ProductService.UnitTests -c Release
+
+## AVANT correctifs : commit 34196f8 (tests ajoutés, code encore vulnérable)
+  Passed F3ServerSidePricingTests.Added_item_is_stored_at_catalog_price          (témoin)
+  Failed F3ServerSidePricingTests.Cart_total_ignores_a_tampered_stored_price
+  Failed F3ServerSidePricingTests.Add_to_cart_request_has_no_client_price_field
+  Failed F1QuickSearchTests.Quote_characters_are_matched_literally
+  Failed F1QuickSearchTests.Draft_products_are_never_returned
+  Failed F1QuickSearchTests.Sql_syntax_in_the_term_matches_nothing_and_never_widens_the_result
+  Failed F1QuickSearchTests.Finds_active_products_by_name_case_insensitively
+  Failed F2OrderOwnershipTests.Another_customer_cannot_get_the_order_even_with_its_id
+  Passed F2OrderOwnershipTests.Owner_gets_her_order                             (témoin)
+Total tests: 9 · 7 failed · 2 passed
+
+## APRÈS correctifs : commits dcbc2d9 (F2), 3802b6c (F3), 7312739 (F1)
+# Même commande, précédée de `dotnet restore --locked-mode` et `dotnet build` (0 avertissement), comme en CI
+  Passed F3ServerSidePricingTests.Added_item_is_stored_at_catalog_price
+  Passed F3ServerSidePricingTests.Cart_total_ignores_a_tampered_stored_price
+  Passed F3ServerSidePricingTests.Add_to_cart_request_has_no_client_price_field
+  Passed F1QuickSearchTests.Quote_characters_are_matched_literally
+  Passed F2OrderOwnershipTests.Another_customer_cannot_get_the_order_even_with_its_id
+  Passed F1QuickSearchTests.Draft_products_are_never_returned
+  Passed F1QuickSearchTests.Sql_syntax_in_the_term_matches_nothing_and_never_widens_the_result
+  Passed F1QuickSearchTests.Finds_active_products_by_name_case_insensitively
+  Passed F2OrderOwnershipTests.Owner_gets_her_order
+Total tests: 9 · 9 passed (suite complète, UserService compris : code de sortie 0)
+
+# Lecture : chaque test « de faille » échoue sur le code vulnérable et passe après correction ;
+# les deux témoins passent dans les deux cas. Les tests détectent donc réellement les failles.
+# Limite : le fournisseur EF Core en mémoire n'exécute pas de SQL. Pour F1, la protection au niveau
+# SQL est vérifiée par la règle Semgrep efcore-raw-sql-non-constant et par le scan DAST.
