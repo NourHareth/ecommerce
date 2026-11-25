@@ -12,6 +12,8 @@ using Microsoft.IdentityModel.Tokens;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddExceptionHandler<AmCart.ProductService.Api.ErrorHandling.InvalidTextInputExceptionHandler>();
+builder.Services.AddProblemDetails();   // any other unhandled exception: generic 500, no details
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -90,6 +92,7 @@ else if (app.Configuration.GetValue<bool>("Swagger:ExposeSpec"))
     app.UseSwagger();
 }
 
+app.UseExceptionHandler();   // C5: invalid text input -> 400 (see ErrorHandling/)
 app.UseHttpsRedirection();
 // app.UseCors();
 app.UseAuthentication();

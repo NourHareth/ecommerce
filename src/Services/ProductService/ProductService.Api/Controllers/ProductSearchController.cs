@@ -27,6 +27,8 @@ public class ProductSearchController : ControllerBase
             return BadRequest(new { success = false, error = new { code = "VALIDATION", message = "Query parameter q is required." } });
         if (q.Length > MaxQueryLength)
             return BadRequest(new { success = false, error = new { code = "VALIDATION", message = $"Query parameter q must be at most {MaxQueryLength} characters." } });
+        if (q.Any(char.IsControl))   // C5: NUL and other control characters are never a product name
+            return BadRequest(new { success = false, error = new { code = "VALIDATION", message = "Query parameter q contains characters that are not allowed." } });
 
         var hits = await _products.QuickSearchAsync(q.Trim(), ct);
         return Ok(new { success = true, data = hits });
