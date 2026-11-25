@@ -18,6 +18,8 @@ builder.Services.AddHttpClient<ProductServiceProxy>((sp, client) =>
     client.BaseAddress = new Uri(url + "/");
     client.Timeout = TimeSpan.FromSeconds(60);
 });
+builder.Services.AddExceptionHandler<AmCart.UserService.Api.ErrorHandling.InvalidTextInputExceptionHandler>();
+builder.Services.AddProblemDetails();   // any other unhandled exception: generic 500, no details
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -78,6 +80,7 @@ else if (app.Configuration.GetValue<bool>("Swagger:ExposeSpec"))
     app.UseSwagger();
 }
 
+app.UseExceptionHandler();   // C5: invalid text input -> 400 (see ErrorHandling/)
 app.UseHttpsRedirection();
 // app.UseCors();
 app.UseAuthentication();
