@@ -31,7 +31,7 @@ The app uses **Development** environment by default, so it reads `appsettings.De
 
 > **Note:** The Development connection string must point to `localhost`. If `appsettings.Development.json` doesn't override the connection string, you can set it via environment variable:
 > ```bash
-> set ConnectionStrings__DefaultConnection=Host=localhost;Port=5432;Database=amcart_products;Username=amcart;Password=amcart_password
+> set ConnectionStrings__DefaultConnection=Host=localhost;Port=5432;Database=amcart_products;Username=amcart;Password=<POSTGRES_PASSWORD>
 > dotnet run --project ProductService.Api
 > ```
 
@@ -68,7 +68,7 @@ Or if you have `psql` installed:
 psql -h localhost -p 5432 -U amcart -d amcart_products -c "\dt"
 ```
 
-Password: `amcart_password`
+Password: `<POSTGRES_PASSWORD>`
 
 **Option B – From inside the cluster:**
 

@@ -62,7 +62,7 @@ Or if you have `psql` installed:
 psql -h localhost -p 5432 -U amcart -d amcart_users -c "\dt"
 ```
 
-Password: `amcart_password`
+Password: `<POSTGRES_PASSWORD>`
 
 **Option B – From inside the cluster:**
 

@@ -20,7 +20,7 @@ PostgreSQL configuration and deployment assets for AmCart services (UserService,
 | `amcart_users`  | UserService    |
 | `amcart_products` | ProductService |
 
-Default user/password in configs: `amcart` / `amcart_password` (change in production).
+No password is committed: copy `postgres/.env.example` to `postgres/.env` and set `POSTGRES_PASSWORD` (generate one, e.g. `openssl rand -hex 24`). The services receive their connection string from the environment (`ConnectionStrings__DefaultConnection`).
 
 ## Deployment guides
 
