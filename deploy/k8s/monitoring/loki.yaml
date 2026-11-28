@@ -40,6 +40,9 @@ spec:
     spec:
       serviceAccountName: loki
       automountServiceAccountToken: false
+      dnsConfig:
+        options:
+          - { name: ndots, value: "2" }   # see deploy/README.md "DNS"
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001

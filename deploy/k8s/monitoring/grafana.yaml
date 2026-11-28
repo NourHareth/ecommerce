@@ -48,6 +48,9 @@ spec:
     spec:
       serviceAccountName: grafana
       automountServiceAccountToken: false
+      dnsConfig:
+        options:
+          - { name: ndots, value: "2" }   # see deploy/README.md "DNS"
       securityContext:
         runAsNonRoot: true
         runAsUser: 472

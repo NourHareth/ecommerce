@@ -15,8 +15,15 @@ deploy/
 │   └── network-policies.yaml     refus par défaut + flux autorisés
 ├── k8s/policies/
 │   └── kyverno-pod-hardening.yaml  contrôle d'admission (Kyverno v1.20)
+├── k8s/monitoring/               observabilité et détection (§4.7), voir « 6. Observabilité »
+│   ├── alloy.yaml                collecte des journaux par l'API Kubernetes (RBAC lecture seule)
+│   ├── loki.yaml                 stockage 7 jours + évaluation des règles de détection
+│   ├── grafana.yaml              tableau de bord sécurité, non exposé
+│   ├── rules/amcart-security.yaml  3 règles d'alerte (injection, énumération, force brute)
+│   └── network-policies.yaml     refus par défaut dans amcart-monitoring
 └── scripts/
     ├── deploy.sh        build, secrets d'exécution, déploiement
+    ├── deploy-monitoring.sh      Loki, Alloy, Grafana (+ règle réseau vers l'API, générée)
     ├── install-kyverno.sh        Kyverno (version épinglée, empreinte SHA-256 vérifiée) + politique
     └── verify-hardening.sh       preuves : rejets d'admission, segmentation, application joignable
 ```
@@ -30,6 +37,8 @@ git clone https://github.com/NourHareth/ecommerce.git ~/amcart && cd ~/amcart
 deploy/scripts/deploy.sh
 deploy/scripts/install-kyverno.sh
 deploy/scripts/verify-hardening.sh
+deploy/scripts/deploy-monitoring.sh
+tests/detection/replay-attacks.sh            # rejoue 3 attaques, vérifie journaux et alertes
 kubectl -n amcart-web port-forward --address 0.0.0.0 svc/ui 8080:8080   # http://<IP-VM>:8080
 ```
 
@@ -110,6 +119,58 @@ namespaces labellisés `app.kubernetes.io/part-of=amcart` pour ne pas bloquer le
   est refusé (Kyverno), un Deployment non durci est refusé, et un pod durci est accepté (témoin) ;
 - **B.** les flux nécessaires passent, les flux interdits sont bloqués ;
 - **C.** la boutique reste joignable de bout en bout après la segmentation.
+
+## 6. Observabilité et détection (§4.7)
+
+```
+ client ──> nginx (ui) ─────────────> user-service ──> product-service
+             │ génère X-Correlation-ID     │ le transmet        │
+             ▼                             ▼                    ▼
+        une ligne JSON par requête, même correlation ID partout (chemin sans chaîne de requête)
+                                   │
+      Alloy (amcart-monitoring) ── lit les journaux des pods par l'API Kubernetes
+                                   ▼
+      Loki : stockage 7 jours + 3 règles LogQL évaluées toutes les 15 s ──> alerte « firing »
+                                   ▼
+      Grafana : tableau de bord « AmCart · Sécurité », alertes, suivi d'une requête par son ID
+```
+
+**Journaux.** Chaque service écrit une ligne `http.request` par appel (route *modèle*, statut, durée,
+identifiant utilisateur, correlation ID) et des **événements de sécurité** à champ `Event` stable :
+
+| Événement | Émis quand | Ce qui n'est **pas** journalisé |
+|-----------|-----------|----------------------------------|
+| `security.injection_attempt` | motif SQL/XSS dans la chaîne de requête ou le chemin | la valeur reçue (seuls le paramètre et le type de motif sont notés) |
+| `security.input_rejected` | entrée refusée (C5, longueur, caractères de contrôle) | la valeur |
+| `security.access_denied` | commande demandée qui n'appartient pas à l'utilisateur | — |
+| `security.auth_failed` | connexion refusée | l'adresse e-mail (remplacée par `AccountRef`, empreinte de 12 caractères) |
+
+C7 a montré que des jetons de réinitialisation finissaient dans les journaux : ni jeton, ni mot de
+passe, ni adresse e-mail, ni chaîne de requête ne sont écrits.
+
+**Règles de détection** (`k8s/monitoring/rules/amcart-security.yaml`), chacune reliée à un scénario
+du plan de réponse (`docs/security/06-plan-reponse-incident.md`) :
+
+| Alerte | Condition | Gravité |
+|--------|-----------|---------|
+| `AmcartInjectionAttempt` | au moins 1 tentative d'injection en 5 min | high |
+| `AmcartOrderEnumeration` | au moins 5 commandes d'autrui demandées par un même utilisateur en 5 min | high |
+| `AmcartLoginBruteForce` | au moins 10 échecs de connexion sur un même compte en 5 min | medium |
+
+**Durcissement de la pile elle-même.** Même régime que l'application : namespace en Pod Security
+« restricted » et soumis à Kyverno, conteneurs non-root, système de fichiers en lecture seule,
+`drop ALL`, limites de ressources, NetworkPolicies en refus par défaut (Alloy et Grafana ne parlent qu'à
+Loki, Alloy en plus au serveur d'API). Grafana : mot de passe aléatoire, pas d'accès anonyme, aucun
+appel sortant, pas d'exposition (port-forward). Seule exception : le jeton de compte de service
+d'Alloy (EXC-003), limité par RBAC à la lecture des pods et de leurs journaux dans les trois
+namespaces AmCart. Ce choix évite le DaemonSet privilégié avec `hostPath` qu'utilisent la plupart
+des collecteurs.
+
+```bash
+deploy/scripts/deploy-monitoring.sh
+kubectl -n amcart-monitoring port-forward svc/grafana 3000:3000   # admin / mot de passe dans ~/.config/amcart/secrets.env
+tests/detection/replay-attacks.sh   # preuve : $OUT_DIR/detection-replay.md
+```
 
 ## DNS : `ndots: 2` (constat du premier déploiement)
 

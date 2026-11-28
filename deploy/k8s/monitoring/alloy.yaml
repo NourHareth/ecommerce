@@ -70,6 +70,9 @@ spec:
     spec:
       serviceAccountName: alloy
       automountServiceAccountToken: true   # EXC-003, see header
+      dnsConfig:
+        options:
+          - { name: ndots, value: "2" }   # see deploy/README.md "DNS"
       securityContext:
         runAsNonRoot: true
         runAsUser: 473
