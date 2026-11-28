@@ -1,0 +1,57 @@
+# Runtime detection (section 4.7). Each rule matches the structured security events the services
+# write (field State_Event, see src/Services/*/*.Api/Observability/SecurityLog.cs). A firing alert
+# starts the incident response plan: docs/security/06-plan-reponse-incident.md (one scenario per rule).
+#
+# Thresholds are deliberately low for this lab and its demonstration. In production they would be
+# tuned on real traffic: one injection pattern can be a false positive, ten in a minute rarely is.
+groups:
+  - name: amcart-security
+    interval: 15s
+    rules:
+      # Scenario A: someone sends SQL/XSS injection patterns (F1-type attack, DAST scanner, bot).
+      - alert: AmcartInjectionAttempt
+        expr: |
+          sum by (app) (
+            count_over_time({namespace="amcart-services"} |= "security.injection_attempt"
+              | json | State_Event="security.injection_attempt" [5m])
+          ) > 0
+        labels:
+          severity: high
+          category: injection
+          owasp: "A05:2025"
+        annotations:
+          summary: "Injection patterns sent to {{ $labels.app }}"
+          description: "{{ $value }} request(s) with SQL/XSS injection patterns in the last 5 minutes."
+          runbook_url: "https://github.com/NourHareth/ecommerce/blob/main/docs/security/06-plan-reponse-incident.md#scenario-a--tentative-dinjection"
+
+      # Scenario B: one user asks for many orders that are not theirs (F2-type IDOR probing).
+      - alert: AmcartOrderEnumeration
+        expr: |
+          sum by (State_UserId) (
+            count_over_time({namespace="amcart-services", app="product-service"} |= "security.access_denied"
+              | json | State_Event="security.access_denied" [5m])
+          ) >= 5
+        labels:
+          severity: high
+          category: access-control
+          owasp: "A01:2025"
+        annotations:
+          summary: "User {{ $labels.State_UserId }} is requesting orders that are not theirs"
+          description: "{{ $value }} order lookups refused for this user in the last 5 minutes."
+          runbook_url: "https://github.com/NourHareth/ecommerce/blob/main/docs/security/06-plan-reponse-incident.md#scenario-b--énumération-de-commandes"
+
+      # Scenario C: many failed sign-ins on one account (brute force).
+      - alert: AmcartLoginBruteForce
+        expr: |
+          sum by (State_AccountRef) (
+            count_over_time({namespace="amcart-services", app="user-service"} |= "security.auth_failed"
+              | json | State_Event="security.auth_failed" [5m])
+          ) >= 10
+        labels:
+          severity: medium
+          category: authentication
+          owasp: "A07:2025"
+        annotations:
+          summary: "Brute force on account {{ $labels.State_AccountRef }}"
+          description: "{{ $value }} failed sign-ins on the same account in the last 5 minutes."
+          runbook_url: "https://github.com/NourHareth/ecommerce/blob/main/docs/security/06-plan-reponse-incident.md#scenario-c--force-brute-sur-un-compte"

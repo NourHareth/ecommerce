@@ -1,0 +1,12 @@
+# Observability tier (section 4.7). Same rules as the application namespaces: Pod Security
+# "restricted" and the Kyverno policy (label part-of=amcart). One narrow, documented exception:
+# Alloy needs a service-account token to read pod logs through the Kubernetes API (EXC-003).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: amcart-monitoring
+  labels:
+    app.kubernetes.io/part-of: amcart
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted

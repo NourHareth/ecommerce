@@ -1,0 +1,68 @@
+# Network segmentation of the observability tier: default deny, then only
+#   alloy   -> loki:3100            (push logs)
+#   grafana -> loki:3100            (queries, alert state)
+#   alloy   -> Kubernetes API       (read pod logs; generated at deploy time, see deploy-monitoring.sh,
+#                                    because the API server address depends on the cluster)
+#   all     -> kube-dns:53
+# Nothing in this namespace can reach the Internet or the application pods, and nothing outside
+# it can reach Loki or Grafana (operators use kubectl port-forward).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: amcart-monitoring
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: amcart-monitoring
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: loki-allow-ingress
+  namespace: amcart-monitoring
+spec:
+  podSelector:
+    matchLabels: { app: loki }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - { key: app, operator: In, values: [alloy, grafana] }
+      ports:
+        - { protocol: TCP, port: 3100 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: collectors-allow-egress-to-loki
+  namespace: amcart-monitoring
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app, operator: In, values: [alloy, grafana] }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app: loki }
+      ports:
+        - { protocol: TCP, port: 3100 }

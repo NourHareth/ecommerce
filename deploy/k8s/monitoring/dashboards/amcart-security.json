@@ -1,0 +1,162 @@
+{
+  "uid": "amcart-security",
+  "title": "AmCart · Sécurité",
+  "description": "Événements de sécurité des services AmCart (section 4.7). Les alertes sont dans Alerting > Alert rules (règles Loki).",
+  "tags": ["amcart", "security"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "correlation_id",
+        "label": "Correlation ID",
+        "type": "textbox",
+        "query": "",
+        "current": { "text": "", "value": "" },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Tentatives d'injection (1 h)",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "instant",
+          "expr": "sum(count_over_time({namespace=\"amcart-services\"} |= \"security.injection_attempt\" | json | State_Event=\"security.injection_attempt\" [1h]))"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none", "textMode": "value" },
+      "fieldConfig": { "defaults": { "noValue": "0", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Commandes d'autrui demandées (1 h)",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "instant",
+          "expr": "sum(count_over_time({namespace=\"amcart-services\"} |= \"security.access_denied\" | json | State_Event=\"security.access_denied\" [1h]))"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none", "textMode": "value" },
+      "fieldConfig": { "defaults": { "noValue": "0", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 5 } ] } }, "overrides": [] }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Échecs de connexion (1 h)",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "instant",
+          "expr": "sum(count_over_time({namespace=\"amcart-services\"} |= \"security.auth_failed\" | json | State_Event=\"security.auth_failed\" [1h]))"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none", "textMode": "value" },
+      "fieldConfig": { "defaults": { "noValue": "0", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 3 }, { "color": "red", "value": 10 } ] } }, "overrides": [] }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Erreurs serveur 5xx à la passerelle (1 h)",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "instant",
+          "expr": "sum(count_over_time({namespace=\"amcart-web\", app=\"ui\"} |= \"http.access\" | json | status >= 500 [1h]))"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none", "textMode": "value" },
+      "fieldConfig": { "defaults": { "noValue": "0", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Événements de sécurité par type (par minute)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "range",
+          "legendFormat": "{{State_Event}}",
+          "expr": "sum by (State_Event) (count_over_time({namespace=\"amcart-services\"} |= \"security.\" | json | State_Event=~\"security[.].+\" [1m]))"
+        }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Réponses de la passerelle par statut HTTP (par minute)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "range",
+          "legendFormat": "{{status}}",
+          "expr": "sum by (status) (count_over_time({namespace=\"amcart-web\", app=\"ui\"} |= \"http.access\" | json [1m]))"
+        }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 7,
+      "type": "logs",
+      "title": "Derniers événements de sécurité",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "range",
+          "expr": "{namespace=\"amcart-services\"} |= \"security.\" | json | State_Event=~\"security[.].+\" | line_format \"{{.State_Event}}  app={{.app}}  user={{.State_UserId}} account={{.State_AccountRef}}  {{.State_Indicators}} {{.State_Fields}} {{.State_Resource}} {{.State_Reason}}  correlation={{.State_CorrelationId}}\""
+        }
+      ],
+      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending", "enableLogDetails": true, "dedupStrategy": "none" }
+    },
+    {
+      "id": 8,
+      "type": "logs",
+      "title": "Suivre une requête de bout en bout (saisir un correlation ID en haut)",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 22 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "queryType": "range",
+          "expr": "{namespace=~\"amcart-web|amcart-services\"} |= \"$correlation_id\""
+        }
+      ],
+      "options": { "showTime": true, "showLabels": true, "wrapLogMessage": true, "sortOrder": "Ascending", "enableLogDetails": true, "dedupStrategy": "none" }
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+// Collect the logs of every pod in the AmCart namespaces and send them to Loki.
+// Labels kept: namespace, pod, container, app. Everything else stays inside the JSON line
+// (correlation id, user id...) and is parsed at query time: high-cardinality values must not be labels.
+
+logging {
+  level  = "warn"
+  format = "logfmt"
+}
+
+discovery.kubernetes "pods" {
+  role = "pod"
+  namespaces {
+    names = ["amcart-web", "amcart-services", "amcart-databases"]
+  }
+}
+
+discovery.relabel "pods" {
+  targets = discovery.kubernetes.pods.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app"]
+    target_label  = "app"
+  }
+}
+
+loki.source.kubernetes "pods" {
+  targets    = discovery.relabel.pods.output
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki.amcart-monitoring.svc.cluster.local:3100/loki/api/v1/push"
+  }
+}

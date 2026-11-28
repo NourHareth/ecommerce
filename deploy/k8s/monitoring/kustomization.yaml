@@ -1,0 +1,35 @@
+# Observability stack (section 4.7): Alloy (collect) -> Loki (store + detect) -> Grafana (view).
+# Deployed by deploy/scripts/deploy-monitoring.sh, after the application.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: amcart
+    includeSelectors: false
+resources:
+  - namespace.yaml
+  - loki.yaml
+  - alloy.yaml
+  - grafana.yaml
+  - network-policies.yaml
+# Config files stay readable in Git; the generated names carry a content hash, so changing a rule
+# or the dashboard rolls the pod that uses it.
+configMapGenerator:
+  - name: loki-config
+    namespace: amcart-monitoring
+    files: [config/loki.yaml]
+  - name: loki-rules
+    namespace: amcart-monitoring
+    files: [rules/amcart-security.yaml]
+  - name: alloy-config
+    namespace: amcart-monitoring
+    files: [config/config.alloy]
+  - name: grafana-datasources
+    namespace: amcart-monitoring
+    files: [loki.yaml=config/grafana-datasources.yaml]
+  - name: grafana-dashboard-provider
+    namespace: amcart-monitoring
+    files: [amcart.yaml=config/grafana-dashboard-provider.yaml]
+  - name: grafana-dashboards
+    namespace: amcart-monitoring
+    files: [dashboards/amcart-security.json]

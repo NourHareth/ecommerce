@@ -1,0 +1,118 @@
+# Grafana Alloy: collects the logs of the AmCart pods and ships them to Loki.
+#
+# It reads logs through the Kubernetes API (pods/log), NOT from the node's disk: no hostPath, no
+# privileged DaemonSet, so it runs under Pod Security "restricted" like everything else.
+# The price is a service-account token (EXC-003), limited by RBAC to READ pods and their logs in
+# the three AmCart namespaces only: no secrets, no writes, no other namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy
+  namespace: amcart-monitoring
+automountServiceAccountToken: false   # mounted explicitly by the one pod that needs it
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: amcart-log-reader
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+# RoleBindings, not a ClusterRoleBinding: the role only applies in these namespaces.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: alloy-log-reader
+  namespace: amcart-web
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: amcart-log-reader }
+subjects:
+  - { kind: ServiceAccount, name: alloy, namespace: amcart-monitoring }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: alloy-log-reader
+  namespace: amcart-services
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: amcart-log-reader }
+subjects:
+  - { kind: ServiceAccount, name: alloy, namespace: amcart-monitoring }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: alloy-log-reader
+  namespace: amcart-databases
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: amcart-log-reader }
+subjects:
+  - { kind: ServiceAccount, name: alloy, namespace: amcart-monitoring }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alloy
+  namespace: amcart-monitoring
+  labels:
+    app: alloy
+spec:
+  replicas: 1   # one collector for the whole cluster (logs come from the API, not the node)
+  selector:
+    matchLabels:
+      app: alloy
+  template:
+    metadata:
+      labels:
+        app: alloy
+    spec:
+      serviceAccountName: alloy
+      automountServiceAccountToken: true   # EXC-003, see header
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 473
+        runAsGroup: 473
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: alloy
+          image: grafana/alloy:v1.22.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --storage.path=/var/lib/alloy/data
+            - --server.http.listen-addr=0.0.0.0:12345
+            - --stability.level=public-preview
+            - --disable-reporting
+          ports:
+            - name: http
+              containerPort: 12345
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - { name: config, mountPath: /etc/alloy, readOnly: true }
+            - { name: data, mountPath: /var/lib/alloy/data }
+            - { name: tmp, mountPath: /tmp }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 384Mi }
+          readinessProbe:
+            httpGet: { path: /-/ready, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+      volumes:
+        - name: config
+          configMap:
+            name: alloy-config
+        - name: data
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi

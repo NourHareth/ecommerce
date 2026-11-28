@@ -80,5 +80,11 @@ spec:
           && c.?resources.?limits.?memory.hasValue()
           && c.?resources.?requests.?memory.hasValue())
 
-    - message: "R7 service account token: set automountServiceAccountToken: false (the app does not call the Kubernetes API)."
-      expression: object.spec.?automountServiceAccountToken.orValue(true) == false
+    # One exception, registered as EXC-003: the log collector (Alloy, namespace amcart-monitoring)
+    # reads pod logs through the Kubernetes API, so it needs its token. RBAC limits that token to
+    # reading pods and pods/log in the AmCart namespaces (deploy/k8s/monitoring/alloy.yaml).
+    - message: "R7 service account token: set automountServiceAccountToken: false (the app does not call the Kubernetes API). Only exception: the log collector (EXC-003)."
+      expression: >-
+        object.spec.?automountServiceAccountToken.orValue(true) == false
+        || (request.namespace == 'amcart-monitoring'
+            && object.spec.?serviceAccountName.orValue('') == 'alloy')

@@ -1,0 +1,107 @@
+# Loki: stores the logs and evaluates the detection rules (rules/amcart-security.yaml) every 15 s.
+# Single binary, filesystem storage on a 2 GiB volume, 7-day retention. Reachable only from Alloy
+# (writes) and Grafana (reads), see network-policies.yaml.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loki
+  namespace: amcart-monitoring
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loki-data
+  namespace: amcart-monitoring
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  namespace: amcart-monitoring
+  labels:
+    app: loki
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # ReadWriteOnce volume: never two pods at once
+  selector:
+    matchLabels:
+      app: loki
+  template:
+    metadata:
+      labels:
+        app: loki
+    spec:
+      serviceAccountName: loki
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: loki
+          image: grafana/loki:3.7.11
+          imagePullPolicy: IfNotPresent
+          args: ["-config.file=/etc/loki/loki.yaml"]
+          ports:
+            - name: http
+              containerPort: 3100
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - { name: config, mountPath: /etc/loki/loki.yaml, subPath: loki.yaml, readOnly: true }
+            - { name: rules, mountPath: /etc/loki/rules/fake, readOnly: true }   # tenant "fake" = auth disabled
+            - { name: data, mountPath: /loki }
+            - { name: tmp, mountPath: /tmp }
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { cpu: "1", memory: 512Mi }
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 20
+            timeoutSeconds: 3
+      volumes:
+        - name: config
+          configMap:
+            name: loki-config
+        - name: rules
+          configMap:
+            name: loki-rules
+        - name: data
+          persistentVolumeClaim:
+            claimName: loki-data
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: amcart-monitoring
+  labels:
+    app: loki
+spec:
+  type: ClusterIP
+  selector:
+    app: loki
+  ports:
+    - name: http
+      port: 3100
+      targetPort: http
