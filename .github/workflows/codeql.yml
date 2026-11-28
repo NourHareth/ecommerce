@@ -11,13 +11,22 @@
 #
 name: "CodeQL Advanced"
 
+# Advisory only (docs/security/03-politique-de-blocage.md). Runs on PRs, weekly on main and on demand.
+# Not on push to main: the PR already analysed the same code, and GitHub pauses Actions on forks
+# that use too much.
 on:
-  push:
-    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
   schedule:
     - cron: '32 3 * * 6'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze:
