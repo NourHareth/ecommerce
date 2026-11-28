@@ -92,6 +92,9 @@ else if (app.Configuration.GetValue<bool>("Swagger:ExposeSpec"))
     app.UseSwagger();
 }
 
+// Section 4.7: correlation ID + one structured line per request + injection-attempt detection.
+// First, so it also sees the final status set by the exception handler.
+app.UseMiddleware<AmCart.ProductService.Api.Observability.RequestTelemetryMiddleware>();
 app.UseExceptionHandler();   // C5: invalid text input -> 400 (see ErrorHandling/)
 app.UseHttpsRedirection();
 // app.UseCors();

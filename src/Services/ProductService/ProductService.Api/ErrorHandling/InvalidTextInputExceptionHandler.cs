@@ -1,3 +1,4 @@
+using AmCart.ProductService.Api.Observability;
 using Microsoft.AspNetCore.Diagnostics;
 using Npgsql;
 
@@ -11,11 +12,19 @@ namespace AmCart.ProductService.Api.ErrorHandling;
 /// </summary>
 public sealed class InvalidTextInputExceptionHandler : IExceptionHandler
 {
+    private readonly ILogger<InvalidTextInputExceptionHandler> _logger;
+
+    public InvalidTextInputExceptionHandler(ILogger<InvalidTextInputExceptionHandler> logger)
+    {
+        _logger = logger;
+    }
+
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
         if (!IsInvalidTextInput(exception))
             return false;
 
+        _logger.LogInputRejected(httpContext, "request", "text_not_storable");
         httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
         await httpContext.Response.WriteAsJsonAsync(new
         {

@@ -10,6 +10,8 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddTransient<AmCart.UserService.Api.Observability.CorrelationIdPropagationHandler>();
 builder.Services.AddHttpClient<ProductServiceProxy>((sp, client) =>
 {
     var url = builder.Configuration["ProductService:BaseUrl"]?.Trim().TrimEnd('/');
@@ -17,7 +19,7 @@ builder.Services.AddHttpClient<ProductServiceProxy>((sp, client) =>
         url = "http://localhost:5002";
     client.BaseAddress = new Uri(url + "/");
     client.Timeout = TimeSpan.FromSeconds(60);
-});
+}).AddHttpMessageHandler<AmCart.UserService.Api.Observability.CorrelationIdPropagationHandler>();
 builder.Services.AddExceptionHandler<AmCart.UserService.Api.ErrorHandling.InvalidTextInputExceptionHandler>();
 builder.Services.AddProblemDetails();   // any other unhandled exception: generic 500, no details
 builder.Services.AddControllers();
@@ -80,6 +82,9 @@ else if (app.Configuration.GetValue<bool>("Swagger:ExposeSpec"))
     app.UseSwagger();
 }
 
+// Section 4.7: correlation ID + one structured line per request + injection-attempt detection.
+// First, so it also sees the final status set by the exception handler.
+app.UseMiddleware<AmCart.UserService.Api.Observability.RequestTelemetryMiddleware>();
 app.UseExceptionHandler();   // C5: invalid text input -> 400 (see ErrorHandling/)
 app.UseHttpsRedirection();
 // app.UseCors();

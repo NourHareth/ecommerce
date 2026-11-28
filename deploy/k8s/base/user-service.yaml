@@ -19,7 +19,12 @@ data:
   ASPNETCORE_HTTP_PORTS: "8080"
   App__BaseUrl: http://localhost:8080
   ProductService__BaseUrl: http://product-service.amcart-services.svc.cluster.local:8080
-  Logging__Console__FormatterName: json   # structured logs (section 4.7)
+  # Structured logs (section 4.7): one JSON object per line, UTC timestamp, scopes (CorrelationId).
+  Logging__Console__FormatterName: json
+  Logging__Console__FormatterOptions__IncludeScopes: "true"
+  Logging__Console__FormatterOptions__UseUtcTimestamp: "true"
+  Logging__Console__FormatterOptions__TimestampFormat: "yyyy-MM-ddTHH:mm:ss.fffZ"
+  Logging__LogLevel__Microsoft.EntityFrameworkCore: Warning   # one SQL line per query: noise
   DOTNET_EnableDiagnostics: "0"           # no debugger/profiler IPC endpoints
 ---
 apiVersion: apps/v1

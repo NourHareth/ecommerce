@@ -1,3 +1,4 @@
+using AmCart.UserService.Api.Observability;
 using AmCart.UserService.Application;
 using AmCart.UserService.Application.DTOs;
 using AmCart.UserService.Application.Interfaces;
@@ -12,11 +13,13 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService, IConfiguration configuration)
+    public AuthController(IAuthService authService, IConfiguration configuration, ILogger<AuthController> logger)
     {
         _authService = authService;
         _configuration = configuration;
+        _logger = logger;
     }
 
     [HttpPost("register")]
@@ -106,7 +109,10 @@ public class AuthController : ControllerBase
         var userAgent = HttpContext.Request.Headers.UserAgent.ToString();
         var result = await _authService.LoginAsync(request, ipAddress, userAgent, ct);
         if (!result.Success)
+        {
+            _logger.LogAuthFailed(HttpContext, request.Email, result.ErrorCode ?? "unknown");
             return Unauthorized(new { success = false, error = new { code = result.ErrorCode, message = result.Message } });
+        }
         return Ok(new { success = true, data = new { user = result.User, tokens = result.Tokens } });
     }
 

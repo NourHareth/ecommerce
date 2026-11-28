@@ -1,8 +1,10 @@
 using AmCart.ProductService.Api.Controllers;
 using AmCart.ProductService.Api.ErrorHandling;
 using AmCart.ProductService.Application.Interfaces;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Npgsql;
 using Xunit;
@@ -51,8 +53,12 @@ public class C5InvalidTextInputTests
     public async Task Quick_search_rejects_control_characters_without_querying_the_database(string q)
     {
         var repository = new Mock<IProductRepository>(MockBehavior.Strict);
+        var controller = new ProductSearchController(repository.Object, NullLogger<ProductSearchController>.Instance)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
 
-        var result = await new ProductSearchController(repository.Object).Search(q);
+        var result = await controller.Search(q);
 
         Assert.IsType<BadRequestObjectResult>(result);
         repository.VerifyNoOtherCalls();
