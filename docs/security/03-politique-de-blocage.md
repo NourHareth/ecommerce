@@ -52,6 +52,32 @@ de **promotion** appartient au job `security-gate`, qui exige les contrôles sta
 Le job `security-gate` ne réussit que si les cinq contrôles statiques, le DAST et les builds réussissent.
 Rien n'est promu tant qu'un contrôle est rouge.
 
+*Piège corrigé : un job ignoré compte comme réussi.* Dans GitHub Actions, si un job dont dépend
+`security-gate` échoue, `security-gate` est par défaut **ignoré** (*skipped*), et GitHub rapporte un job
+ignoré comme un succès : rendu obligatoire, ce check aurait laissé fusionner une PR dont un contrôle
+était rouge. `security-gate` s'exécute donc toujours (`if: always()`) et vérifie lui-même le résultat de
+chaque job ; il échoue dès qu'un résultat n'est pas `success`.
+
+**Quand le DAST tourne.** Le DAST dure environ 16 minutes, et GitHub met en pause Actions sur les forks
+trop consommateurs (c'est arrivé le 2026-11-25 : plus aucune CI pendant plusieurs jours). Le job `plan`
+décide donc :
+
+| Événement | DAST | Raison |
+|-----------|------|--------|
+| PR qui modifie du code, de la configuration ou des manifestes | oui | c'est là que la décision de fusion se prend |
+| PR qui ne modifie que `docs/` ou des fichiers `.md` | non | ne peut pas changer l'application |
+| push sur `main` (fusion d'une PR) | non | la PR a déjà été testée |
+| exécution hebdomadaire (lundi) et manuelle | oui | de nouvelles CVE apparaissent sans changement de code |
+
+Le seul résultat non-`success` que `security-gate` accepte est un DAST *ignoré parce que `plan` l'a
+décidé*. Si `plan` échoue (par exemple si le calcul des fichiers modifiés échoue), le DAST n'est pas
+considéré comme facultatif et la porte reste fermée. CodeQL suit la même logique : PR, hebdomadaire et
+manuel, plus de second passage après fusion.
+
+*Limite :* le ruleset n'exige pas qu'une PR soit à jour avec `main` avant fusion. Deux PR testées
+séparément peuvent donc, une fois fusionnées, produire une combinaison jamais testée en DAST. L'exécution
+hebdomadaire, et une exécution manuelle avant chaque démonstration, réduisent ce risque.
+
 **Ce qui empêche de contourner la CI.** Un contrôle qui échoue ne bloque rien si l'on peut pousser
 directement sur `main`. Le ruleset GitHub `protect-main` (`.github/rulesets/protect-main.json`) impose
 donc une PR pour toute modification de `main`, interdit le force-push et la suppression, et n'accorde

@@ -10,6 +10,9 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  # Weekly full run on main, DAST included: new CVEs appear without any code change.
+  schedule:
+    - cron: "17 4 * * 1"
 
 permissions:
   contents: read
@@ -26,6 +29,37 @@ env:
   TRIVY_IGNOREFILE: .trivyignore.yaml
 
 jobs:
+  # ------------------------------------------------------------------ plan
+  # DAST (about 16 min on a kind cluster) is by far the costliest job, and GitHub pauses Actions on
+  # forks that use too much. It runs on every PR that changes more than documentation, on the weekly
+  # schedule and on demand. It is skipped on a push to main (the PR that produced the merge already ran
+  # it) and on documentation-only PRs (they cannot change the application).
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    outputs:
+      run_dast: ${{ steps.decide.outputs.run_dast }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          run=true
+          case "$EVENT" in
+            push) run=false ;;
+            pull_request)
+              # Not piped: a failing git diff must fail the job (fail closed), not skip DAST.
+              git diff --name-only "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/changed.txt"
+              cat "$RUNNER_TEMP/changed.txt"
+              if ! grep -qvE '^docs/|\.md$' "$RUNNER_TEMP/changed.txt"; then run=false; fi ;;
+          esac
+          echo "run_dast=$run" | tee -a "$GITHUB_OUTPUT"
+
   # ------------------------------------------------------------------ build & tests
   dotnet:
     name: Build & test (.NET)
@@ -234,7 +268,8 @@ jobs:
   # security-gate, which needs DAST AND the static controls.
   dast:
     name: "Security · DAST (ZAP + business logic)"
-    needs: [dotnet, ui]
+    needs: [plan, dotnet, ui]
+    if: needs.plan.outputs.run_dast == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -290,9 +325,29 @@ jobs:
           retention-days: 30
 
   # ------------------------------------------------------------------ gate
+  # `if: always()` matters: without it, a failed control makes this job SKIPPED, and GitHub reports a
+  # skipped job as a success, so a required "Security gate" check would let the PR merge anyway.
+  # The job therefore always runs and checks each result itself.
   security-gate:
     name: Security gate
-    needs: [dotnet, ui, sast, sca, secrets, iac, images, dast]
+    needs: [plan, dotnet, ui, sast, sca, secrets, iac, images, dast]
+    if: always()
     runs-on: ubuntu-latest
     steps:
-      - run: echo "All blocking security controls passed for ${{ github.sha }}."
+      - name: Every blocking control must have passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          RUN_DAST: ${{ needs.plan.outputs.run_dast }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "  \(.key): \(.value.result)"'
+          # The only accepted non-success: DAST skipped because the plan decided not to run it.
+          failed="$(echo "$NEEDS" | jq -r --arg rd "$RUN_DAST" '
+            to_entries[]
+            | select(.value.result != "success")
+            | select((.key == "dast" and .value.result == "skipped" and $rd == "false") | not)
+            | .key')"
+          if [ -n "$failed" ]; then
+            echo "::error::Blocking controls not passed: $(printf '%s' "$failed" | tr '\n' ' ')"
+            exit 1
+          fi
+          echo "All blocking security controls passed for $GITHUB_SHA (DAST run: $RUN_DAST)."
